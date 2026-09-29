@@ -452,4 +452,22 @@ $('#clear-local').addEventListener('click', () => guarded(async () => {
 
 $('#app-version').textContent = APP_VERSION;
 renderRecords().catch((error) => showStatus(error.message, true));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(() => {});
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  let reloadingForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadingForUpdate) return;
+    reloadingForUpdate = true;
+    window.location.reload();
+  });
+  navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' })
+    .then((registration) => {
+      const checkForUpdate = () => registration.update().catch(() => {});
+      checkForUpdate();
+      window.setInterval(checkForUpdate, 30 * 60 * 1000);
+    })
+    .catch(() => {});
+}
+
+registerServiceWorker();
