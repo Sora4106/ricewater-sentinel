@@ -1,0 +1,13 @@
+{
+  "name": "稻田水位監控器",
+  "short_name": "稻田水位",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f4ea",
+  "theme_color": "#155e48",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
+

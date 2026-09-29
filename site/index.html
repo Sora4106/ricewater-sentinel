@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#155e48">
+  <title>稻田水位監控器</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="mark" aria-hidden="true">水</div>
+      <div>
+        <h1>稻田水位監控器</h1>
+        <p id="connection">尚未連線</p>
+      </div>
+      <button id="connect" class="primary">連接 BLE</button>
+    </header>
+
+    <section class="summary">
+      <article><span>裝置</span><strong id="device-id">—</strong></article>
+      <article><span>待下載</span><strong id="device-count">—</strong></article>
+      <article><span>手機已存</span><strong id="local-count">0</strong></article>
+      <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
+      <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
+      <article><span>App 版本</span><strong id="app-version">—</strong></article>
+      <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
+    </section>
+
+    <section class="card">
+      <h2>設定</h2>
+      <div class="form-grid">
+        <label>裝置 ID<input id="setting-id" maxlength="8" placeholder="RICE0001"></label>
+        <label>讀取週期（小時）<input id="setting-interval" type="number" min="1" max="24" value="1"></label>
+        <label>GPS 校時週期（天）<input id="setting-gps" type="number" min="1" max="7" value="3"></label>
+        <label>水深修正（mm）<input id="setting-offset" type="number" min="-500" max="500" value="0"></label>
+      </div>
+      <label class="toggle"><input id="setting-climate" type="checkbox"> 啟用 DHT22 溫溼度</label>
+      <p class="setting-note">尺規裁切範圍：<strong id="roi-state">尚未學習</strong></p>
+      <div class="actions">
+        <button id="save-settings">寫入設定</button>
+        <button id="sync-time">以手機 UTC 校時</button>
+        <button id="gps-sync">立即 GPS 校時</button>
+        <button id="clear-roi" class="danger">重新學習尺規位置</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>量測與資料</h2>
+      <div class="actions">
+        <button id="measure">立即量測</button>
+        <button id="download" class="primary">下載到手機</button>
+        <button id="refresh">重新讀取狀態</button>
+        <button id="sleep">結束並睡眠</button>
+      </div>
+      <div class="actions secondary-actions">
+        <button id="sync-cloud">重試雲端同步</button>
+        <button id="export">匯出 CSV</button>
+        <button id="clear-local" class="danger">清除手機資料</button>
+      </div>
+      <progress id="progress" max="1" value="0"></progress>
+      <p id="status" role="status">請按設定按鈕喚醒監控器，再連接 BLE。</p>
+    </section>
+
+    <section class="card table-card">
+      <h2>手機最近資料</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>流水號</th><th>時間</th><th>水深</th><th>頂端距離</th><th>溫度</th><th>濕度</th><th>品質</th><th>狀態</th></tr></thead>
+          <tbody id="records"><tr><td colspan="8">尚無資料</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="supabase-config.js"></script>
+  <script src="version.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
