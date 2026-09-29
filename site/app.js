@@ -97,6 +97,29 @@ function parseRecord(value) {
   };
 }
 
+function createCloudTestRecord() {
+  const now = Date.now();
+  const testValue = `PWA_TEST_${now}`;
+  return {
+    // Keep synthetic records separate from actual device measurements while
+    // exercising the identical IndexedDB -> Supabase upload path.
+    deviceId: `TEST-${info?.id || 'PWA'}`,
+    firmwareVersion: info?.fw || 'PWA-TEST',
+    appVersion: APP_VERSION,
+    sequence: now,
+    epochUtc: Math.floor(now / 1000),
+    surfaceFromTopMm: -32768,
+    waterDepthMm: -32768,
+    temperatureCentiC: -32768,
+    humidityCentiPct: 65535,
+    quality: 100,
+    flags: 0,
+    crc16: 0,
+    downloadedAt: now,
+    cloudTestValue: testValue,
+  };
+}
+
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
@@ -251,6 +274,7 @@ function formatValue(value, divisor, suffix) {
 }
 
 function measurementStatus(record) {
+  if (record.cloudTestValue) return `雲端測試（${record.cloudTestValue}）`;
   if (!(record.flags & 0x01)) {
     return (record.flags & 0x80) ? '查無尺規' : '相機取像失敗';
   }
@@ -420,6 +444,18 @@ $('#clear-roi').addEventListener('click', () => guarded(async () => {
 $('#measure').addEventListener('click', () => guarded(() => sendCommand('MEASURE')));
 $('#download').addEventListener('click', () => guarded(async () => { incoming = []; expectedDownload = 0; await sendCommand('DOWNLOAD'); }));
 $('#sleep').addEventListener('click', () => guarded(() => sendCommand('SLEEP')));
+$('#test-cloud').addEventListener('click', () => guarded(async () => {
+  const testRecord = createCloudTestRecord();
+  await saveRecords([testRecord]);
+  const result = await syncRecordsToCloud([testRecord]);
+  if (!result.configured) {
+    showStatus(`測試參數 ${testRecord.cloudTestValue} 已保留於手機；Supabase 尚未設定。`, true);
+  } else if (result.pending) {
+    showStatus(`測試參數 ${testRecord.cloudTestValue} 尚未上傳，已保留於手機等待重試。`, true);
+  } else {
+    showStatus(`測試參數 ${testRecord.cloudTestValue} 已成功上傳 Supabase。`);
+  }
+}));
 $('#sync-cloud').addEventListener('click', () => guarded(async () => {
   const result = await syncPendingCloudRecords();
   if (!result.configured) {
