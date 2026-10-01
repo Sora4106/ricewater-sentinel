@@ -6,7 +6,7 @@ const UUID = {
   event: '7f510004-4b7e-4ca4-9f6b-6b2752494345',
 };
 
-const APP_VERSION = self.RICE_APP_VERSION;
+const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.appVersion || '未知版本';
 
 const $ = (selector) => document.querySelector(selector);
 const decoder = new TextDecoder();
