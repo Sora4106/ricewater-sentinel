@@ -67,11 +67,41 @@ function getSupabaseConfig() {
   return { url, anonKey, table };
 }
 
-function setCloudSummary(message, bad = false) {
-  const target = $('#cloud-status');
+function setCloudDetail(message = '') {
+  const target = $('#cloud-detail');
   if (!target) return;
+  target.hidden = !message;
   target.textContent = message;
-  target.style.color = bad ? '#a63d31' : '';
+}
+
+function cloudDiagnosticMessage(errorMessage) {
+  const raw = String(errorMessage || '').trim();
+  if (!raw) return '';
+  if (/failed to fetch|networkerror|load failed/i.test(raw)) {
+    return '雲端診斷：手機無法連上 Supabase。請確認手機網路、Supabase 專案網址與 HTTPS。';
+  }
+  if (/Supabase HTTP 401/.test(raw)) {
+    return '雲端診斷：HTTP 401，Supabase 不接受 anon key；請確認 Project URL 與 anon／publishable key。';
+  }
+  if (/Supabase HTTP 403/.test(raw)) {
+    return '雲端診斷：HTTP 403，資料表的 RLS 新增權限拒絕此筆資料。';
+  }
+  if (/Supabase HTTP 404/.test(raw)) {
+    return '雲端診斷：HTTP 404，找不到 Supabase 資料表或 REST 路徑；請確認資料表名稱。';
+  }
+  if (/Supabase HTTP 409/.test(raw)) {
+    return '雲端診斷：HTTP 409，資料表主鍵或 upsert 設定不符合預期。';
+  }
+  return `雲端診斷：${raw}`;
+}
+
+function setCloudSummary(message, bad = false, detail = '') {
+  const target = $('#cloud-status');
+  if (target) {
+    target.textContent = message;
+    target.style.color = bad ? '#a63d31' : '';
+  }
+  setCloudDetail(detail);
 }
 
 function nullableValue(value, invalidValue) {
@@ -296,7 +326,8 @@ async function syncRecordsToCloud(records) {
   } catch (error) {
     const unsynced = records.slice(synced);
     await markCloudRecords(unsynced, 'pending', error.message);
-    setCloudSummary(`待重試 ${unsynced.length} 筆`, true);
+    setCloudSummary(`待重試 ${unsynced.length} 筆`, true,
+                    cloudDiagnosticMessage(error.message));
     await renderRecords();
     return { configured: true, synced, pending: unsynced.length, error };
   }
@@ -328,7 +359,11 @@ async function renderRecords() {
     setCloudSummary('未設定');
   } else {
     const lastCloudError = records.find((record) => record.cloudStatus !== 'synced' && record.cloudError);
-    setCloudSummary(pendingCloud ? `待上傳 ${pendingCloud} 筆` : '已同步', Boolean(lastCloudError));
+    setCloudSummary(
+      pendingCloud ? `待上傳 ${pendingCloud} 筆` : '已同步',
+      Boolean(lastCloudError),
+      lastCloudError ? cloudDiagnosticMessage(lastCloudError.cloudError) : ''
+    );
   }
   const rows = records.slice(0, 30).map((record) => {
     const time = record.epochUtc ? new Date(record.epochUtc * 1000).toLocaleString() : '時間無效';

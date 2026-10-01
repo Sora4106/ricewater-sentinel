@@ -70,6 +70,10 @@ button.primary { color: white; border-color: var(--green); background: var(--gre
 button.danger { color: var(--danger); }
 progress { width: 100%; height: 8px; margin: 18px 0 10px; accent-color: var(--green-2); }
 #status { color: var(--muted); font-size: .9rem; }
+.cloud-detail {
+  margin-top: 8px; color: var(--danger); font-size: .84rem;
+  overflow-wrap: anywhere;
+}
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: .85rem; }
 th, td { padding: 10px 9px; border-bottom: 1px solid var(--line); text-align: right; }
