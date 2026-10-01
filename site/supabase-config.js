@@ -5,6 +5,6 @@
 // deployment setting is used on the next page load.
 self.RICE_SUPABASE_CONFIG = Object.freeze({
   url: 'https://wffyctbnhawfgnyhxiwe.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmZnljdGJuaGF3ZmdueWh4aXdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODgxNjcsImV4cCI6MjEwNjI2NDE2N30.ZmBcrIN8Q6nJQF4YZTRiOPfqpoEe-4Pt-VQl7juckCc',
+  anonKey: 'sb_publishable_dwhVdM5DtETHF-cIFgHgPA_kdsTpI_Y',
   table: 'rice_measurements',
 });
