@@ -6,7 +6,7 @@ const UUID = {
   event: '7f510004-4b7e-4ca4-9f6b-6b2752494345',
 };
 
-const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.appVersion || '未知版本';
+const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.releaseVersion || '未知版本';
 
 const $ = (selector) => document.querySelector(selector);
 const decoder = new TextDecoder();
@@ -81,7 +81,10 @@ function cloudDiagnosticMessage(errorMessage) {
     return '雲端診斷：手機無法連上 Supabase。請確認手機網路、Supabase 專案網址與 HTTPS。';
   }
   if (/Supabase HTTP 401/.test(raw)) {
-    return '雲端診斷：HTTP 401，Supabase 不接受 anon key；請確認 Project URL 與 anon／publishable key。';
+    if (/42501|row-level security/i.test(raw)) {
+      return '雲端診斷：HTTP 401／42501，已連上 Supabase，但 rice_measurements 的 RLS 拒絕新增資料；請執行專案內的 fix_anon_insert_policy.sql。';
+    }
+    return '雲端診斷：HTTP 401，Supabase 拒絕此 API key；請確認 Project URL 與 publishable key。';
   }
   if (/Supabase HTTP 403/.test(raw)) {
     return '雲端診斷：HTTP 403，資料表的 RLS 新增權限拒絕此筆資料。';
@@ -363,7 +366,7 @@ async function testSupabaseConnection() {
       throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
     }
     setCloudSummary('連線正常');
-    showStatus(`Supabase 連線測試成功（HTTP ${response.status}）；未讀取或寫入量測資料。`);
+    showStatus(`Supabase 連線測試成功（HTTP ${response.status}）；此按鈕只檢查連線，不檢查資料寫入權限。`);
   } catch (error) {
     const detail = cloudDiagnosticMessage(error.message);
     setCloudSummary('連線失敗', true, detail);
