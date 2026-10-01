@@ -30,6 +30,16 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 h1, h2, p { margin: 0; }
 h1 { font: 700 clamp(1.4rem, 5vw, 2.1rem)/1.15 serif; letter-spacing: .04em; }
 h2 { margin-bottom: 16px; font-size: 1.05rem; }
+.card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.card-heading h2 { margin-bottom: 16px; }
+.card-version {
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.card-version strong { color: var(--green); }
 header p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
 .release-version {
   display: inline-flex;
@@ -100,5 +110,6 @@ th:nth-child(2), td:nth-child(2) { text-align: left; }
   header button { width: 100%; margin-left: 0; }
   .summary { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: repeat(2, 1fr); }
+  .card-heading { align-items: flex-start; flex-direction: column; gap: 0; }
   .card { padding: 16px; }
 }

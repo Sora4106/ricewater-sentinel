@@ -309,7 +309,13 @@ async function syncRecordsToCloud(records) {
             'Content-Type': 'application/json',
             Prefer: 'resolution=ignore-duplicates,return=minimal',
           },
-          body: JSON.stringify(batch.map(toCloudRecord)),
+          // JSON.stringify normally removes object keys whose values are
+          // undefined.  Older local records may lack optional sensor fields;
+          // keeping those keys as null ensures every PostgREST batch row has
+          // exactly the same shape.
+          body: JSON.stringify(batch.map(toCloudRecord), (_field, value) => (
+            value === undefined ? null : value
+          )),
         },
       );
       if (!response.ok) {
