@@ -18,6 +18,8 @@ let incoming = [];
 let expectedDownload = 0;
 let downloadLastSequence = 0;
 let dbPromise;
+let currentLocation = null;
+let currentLocationDeviceId = null;
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -62,9 +64,12 @@ function getSupabaseConfig() {
   const url = String(raw.url || '').trim().replace(/\/+$/, '');
   const anonKey = String(raw.anonKey || '').trim();
   const table = String(raw.table || 'rice_measurements').trim();
+  const deviceRpc = String(raw.deviceRpc || 'register_rice_device').trim();
   if (!url || !anonKey) return null;
-  if (!/^https:\/\//.test(url) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) return null;
-  return { url, anonKey, table };
+  if (!/^https:\/\//.test(url) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(table) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(deviceRpc)) return null;
+  return { url, anonKey, table, deviceRpc };
 }
 
 function setCloudDetail(message = '') {
@@ -90,7 +95,7 @@ function cloudDiagnosticMessage(errorMessage) {
     return '雲端診斷：HTTP 403，資料表的 RLS 新增權限拒絕此筆資料。';
   }
   if (/Supabase HTTP 404/.test(raw)) {
-    return '雲端診斷：HTTP 404，找不到 Supabase 資料表或 REST 路徑；請確認資料表名稱。';
+    return '雲端診斷：HTTP 404，找不到 Supabase 資料表或裝置登錄函式；請確認已執行最新 SQL。';
   }
   if (/Supabase HTTP 409/.test(raw)) {
     return '雲端診斷：HTTP 409，資料表主鍵或 upsert 設定不符合預期。';
@@ -194,7 +199,7 @@ function createCloudTestRecord() {
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open('rice-water-monitor', 2);
+    const request = indexedDB.open('rice-water-monitor', 3);
     request.onupgradeneeded = () => {
       const db = request.result;
       const store = db.objectStoreNames.contains('records')
@@ -203,6 +208,12 @@ function openDb() {
       if (!store.indexNames.contains('device')) store.createIndex('device', 'deviceId');
       if (!store.indexNames.contains('cloudStatus')) {
         store.createIndex('cloudStatus', 'cloudStatus');
+      }
+      const deviceStore = db.objectStoreNames.contains('deviceConfigs')
+        ? request.transaction.objectStore('deviceConfigs')
+        : db.createObjectStore('deviceConfigs', { keyPath: 'deviceId' });
+      if (!deviceStore.indexNames.contains('cloudStatus')) {
+        deviceStore.createIndex('cloudStatus', 'cloudStatus');
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -284,6 +295,133 @@ async function markCloudRecords(records, status, errorMessage = null) {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
   });
+}
+
+async function saveDeviceConfig(config) {
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('deviceConfigs', 'readwrite');
+    const store = tx.objectStore('deviceConfigs');
+    const lookup = store.get(config.deviceId);
+    lookup.onsuccess = () => {
+      const existing = lookup.result;
+      store.put({
+        ...existing,
+        ...config,
+        installedAt: existing?.installedAt || config.installedAt || Date.now(),
+        cloudStatus: 'pending',
+        cloudSyncedAt: existing?.cloudSyncedAt || null,
+        cloudError: null,
+        cloudAttempts: existing?.cloudAttempts || 0,
+      });
+    };
+    lookup.onerror = () => tx.abort();
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB device transaction aborted'));
+  });
+}
+
+async function getDeviceConfig(deviceId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('deviceConfigs', 'readonly');
+    const request = tx.objectStore('deviceConfigs').get(deviceId);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getDeviceConfigs() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('deviceConfigs', 'readonly');
+    const request = tx.objectStore('deviceConfigs').getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function markDeviceConfig(config, status, errorMessage = null) {
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('deviceConfigs', 'readwrite');
+    const store = tx.objectStore('deviceConfigs');
+    const lookup = store.get(config.deviceId);
+    lookup.onsuccess = () => {
+      const saved = lookup.result;
+      if (!saved) return;
+      saved.cloudStatus = status;
+      saved.cloudAttempts = (saved.cloudAttempts || 0) + 1;
+      saved.cloudError = errorMessage;
+      if (status === 'synced') saved.cloudSyncedAt = Date.now();
+      store.put(saved);
+    };
+    lookup.onerror = () => tx.abort();
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB device transaction aborted'));
+  });
+}
+
+function deviceRpcBody(config) {
+  return {
+    p_device_id: config.deviceId,
+    p_latitude: config.latitude,
+    p_longitude: config.longitude,
+    p_accuracy_m: config.accuracyM,
+    p_location_recorded_at: config.locationRecordedAt,
+    p_interval_hours: config.intervalHours,
+    p_water_offset_mm: config.waterOffsetMm,
+    p_climate_enabled: config.climateEnabled,
+    p_firmware_version: config.firmwareVersion || 'UNKNOWN',
+    p_app_version: config.appVersion || APP_VERSION,
+  };
+}
+
+async function syncDeviceConfigsToCloud(configs) {
+  const cloudConfig = getSupabaseConfig();
+  if (!cloudConfig) {
+    return { configured: false, synced: 0, pending: configs.length };
+  }
+  if (!configs.length) return { configured: true, synced: 0, pending: 0 };
+
+  let synced = 0;
+  for (let index = 0; index < configs.length; index += 1) {
+    const deviceConfig = configs[index];
+    try {
+      const response = await fetch(
+        `${cloudConfig.url}/rest/v1/rpc/${encodeURIComponent(cloudConfig.deviceRpc)}`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: cloudConfig.anonKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(deviceRpcBody(deviceConfig)),
+        },
+      );
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 240);
+        throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
+      }
+      await markDeviceConfig(deviceConfig, 'synced');
+      synced += 1;
+    } catch (error) {
+      const remaining = configs.slice(index);
+      for (const pending of remaining) {
+        await markDeviceConfig(pending, 'pending', error.message);
+      }
+      return { configured: true, synced, pending: remaining.length, error };
+    }
+  }
+  return { configured: true, synced, pending: 0 };
+}
+
+async function syncPendingDeviceConfigs() {
+  const configs = (await getDeviceConfigs())
+    .filter((config) => config.cloudStatus !== 'synced');
+  return syncDeviceConfigsToCloud(configs);
 }
 
 function cloudRequestBody(records) {
@@ -383,6 +521,13 @@ async function syncPendingCloudRecords() {
   return syncRecordsToCloud(await getPendingCloudRecords());
 }
 
+async function syncAllPendingCloudData() {
+  const devices = await syncPendingDeviceConfigs();
+  const measurements = await syncPendingCloudRecords();
+  await renderRecords();
+  return { devices, measurements };
+}
+
 async function testSupabaseConnection() {
   const config = getSupabaseConfig();
   if (!config) {
@@ -426,18 +571,101 @@ function measurementStatus(record) {
   return '正常';
 }
 
+function renderPhoneLocation(location, cloudStatus = null) {
+  const detail = $('#phone-location');
+  const summary = $('#device-location-status');
+  if (!location) {
+    detail.textContent = '尚未取得；定位只由手機上傳，ESP32 不含 GPS。';
+    summary.textContent = '尚未取得';
+    return;
+  }
+  const accuracy = Number.isFinite(location.accuracyM)
+    ? `，精度約 ±${Math.round(location.accuracyM)} m`
+    : '';
+  const recorded = location.locationRecordedAt
+    ? new Date(location.locationRecordedAt).toLocaleString()
+    : '時間未知';
+  detail.textContent = `${Number(location.latitude).toFixed(6)}, ${Number(location.longitude).toFixed(6)}${accuracy}（${recorded}）`;
+  summary.textContent = cloudStatus === 'synced'
+    ? '已登錄雲端'
+    : cloudStatus === 'pending'
+      ? '待上傳'
+      : '手機已定位';
+}
+
+async function loadDeviceLocation(deviceId) {
+  if (!deviceId) return null;
+  const saved = await getDeviceConfig(deviceId);
+  if (!saved) {
+    if (currentLocationDeviceId === deviceId) renderPhoneLocation(currentLocation);
+    return null;
+  }
+  currentLocation = {
+    latitude: saved.latitude,
+    longitude: saved.longitude,
+    accuracyM: saved.accuracyM,
+    locationRecordedAt: saved.locationRecordedAt,
+  };
+  currentLocationDeviceId = deviceId;
+  renderPhoneLocation(currentLocation, saved.cloudStatus);
+  return saved;
+}
+
+function requestPhoneLocation() {
+  if (!self.isSecureContext) {
+    return Promise.reject(new Error('手機 GPS 定位需要 HTTPS 網頁。'));
+  }
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error('此瀏覽器不支援手機定位功能。'));
+  }
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracyM: Number.isFinite(position.coords.accuracy)
+          ? position.coords.accuracy
+          : null,
+        locationRecordedAt: new Date(position.timestamp || Date.now()).toISOString(),
+      }),
+      (error) => {
+        const messages = {
+          1: '手機定位權限遭拒；請在瀏覽器網站設定中允許位置權限。',
+          2: '手機目前無法取得定位；請到戶外或開啟系統定位後重試。',
+          3: '取得手機定位逾時，請再試一次。',
+        };
+        reject(new Error(messages[error.code] || `手機定位失敗：${error.message}`));
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+    );
+  });
+}
+
 async function renderRecords() {
-  const records = await getLocalRecords();
+  const [records, deviceConfigs] = await Promise.all([
+    getLocalRecords(),
+    getDeviceConfigs(),
+  ]);
   $('#local-count').textContent = records.length;
   const pendingCloud = records.filter((record) => record.cloudStatus !== 'synced').length;
+  const pendingDevices = deviceConfigs.filter((config) => config.cloudStatus !== 'synced').length;
+  if (!info && !currentLocation && deviceConfigs.length) {
+    const latestDevice = [...deviceConfigs].sort((a, b) =>
+      (b.installedAt || 0) - (a.installedAt || 0))[0];
+    renderPhoneLocation(latestDevice, latestDevice.cloudStatus);
+  }
   if (!getSupabaseConfig()) {
     setCloudSummary('未設定');
   } else {
     const lastCloudError = records.find((record) => record.cloudStatus !== 'synced' && record.cloudError);
+    const lastDeviceError = deviceConfigs.find((config) => config.cloudStatus !== 'synced' && config.cloudError);
+    const pendingParts = [];
+    if (pendingCloud) pendingParts.push(`${pendingCloud} 筆量測`);
+    if (pendingDevices) pendingParts.push(`${pendingDevices} 項裝置設定`);
     setCloudSummary(
-      pendingCloud ? `待上傳 ${pendingCloud} 筆` : '已同步',
-      Boolean(lastCloudError),
-      lastCloudError ? cloudDiagnosticMessage(lastCloudError.cloudError) : ''
+      pendingParts.length ? `待上傳 ${pendingParts.join('、')}` : '已同步',
+      Boolean(lastCloudError || lastDeviceError),
+      cloudDiagnosticMessage(lastCloudError?.cloudError || lastDeviceError?.cloudError || '')
     );
   }
   const rows = records.slice(0, 30).map((record) => {
@@ -462,12 +690,12 @@ async function readInfo() {
   $('#firmware-version').textContent = info.fw || '—';
   $('#setting-id').value = info.id;
   $('#setting-interval').value = info.interval_h;
-  $('#setting-gps').value = info.gps_days;
   $('#setting-offset').value = info.offset_mm;
   $('#setting-climate').checked = info.climate;
   $('#roi-state').textContent = info.roi_valid
     ? `已學習（x ${info.roi[0]}, y ${info.roi[1]}, w ${info.roi[2]}, h ${info.roi[3]} ‰）`
     : '尚未學習；下次量測會掃描完整畫面';
+  await loadDeviceLocation(info.id);
   return info;
 }
 
@@ -499,11 +727,16 @@ async function connect() {
   chars.event.addEventListener('characteristicvaluechanged', onEvent);
   await Promise.all([chars.data.startNotifications(), chars.event.startNotifications()]);
   await readInfo();
+  // With no onboard GPS, every BLE connection refreshes the ESP32 RTC from
+  // the phone. Deep sleep keeps this UTC value until power is fully removed.
+  await sendCommand(`SET_TIME,${Math.floor(Date.now() / 1000)}`);
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  await readInfo();
   $('#connection').textContent = `已連接 ${device.name}`;
-  showStatus('連線完成。');
+  showStatus('連線完成，已使用手機 UTC 校正裝置時間。');
   // Retry phone-backed records whenever a field worker opens the app; this
   // does not need, and never asks, the ESP32-CAM to use Wi-Fi.
-  syncPendingCloudRecords().catch((error) => setCloudSummary('待重試', true));
+  syncAllPendingCloudData().catch(() => setCloudSummary('待重試', true));
 }
 
 function onData(event) {
@@ -529,6 +762,7 @@ async function finishDownload(lastSequence) {
   // Local IndexedDB is the first durable destination.  Cloud delivery is then
   // attempted immediately, but a temporary network failure must not prevent
   // the already backed-up phone data from being acknowledged to the device.
+  await syncPendingDeviceConfigs();
   const cloud = await syncRecordsToCloud(incoming);
   await sendCommand(`ACK,${lastSequence}`);
   await renderRecords();
@@ -569,21 +803,79 @@ async function guarded(action) {
 
 $('#connect').addEventListener('click', () => guarded(connect));
 $('#refresh').addEventListener('click', () => guarded(async () => { await sendCommand('GET_INFO'); await new Promise((r) => setTimeout(r, 150)); await readInfo(); }));
+$('#get-location').addEventListener('click', () => guarded(async () => {
+  showStatus('正在取得手機 GPS 定位…');
+  currentLocation = await requestPhoneLocation();
+  currentLocationDeviceId = null;
+  renderPhoneLocation(currentLocation);
+  showStatus('已取得手機定位；確認裝置 ID 後請按「寫入設定並登錄位置」。');
+}));
 $('#save-settings').addEventListener('click', () => guarded(async () => {
   const id = $('#setting-id').value.trim();
   const interval = Number($('#setting-interval').value);
-  const gpsDays = Number($('#setting-gps').value);
   const offset = Number($('#setting-offset').value);
   if (!/^[A-Za-z0-9_-]{1,8}$/.test(id)) throw new Error('ID 必須是 1～8 位英數、- 或 _');
-  if (interval < 1 || interval > 24 || gpsDays < 1 || gpsDays > 7 || offset < -500 || offset > 500) throw new Error('設定值超出範圍');
-  for (const command of [`SET_ID,${id}`, `SET_INTERVAL,${interval}`, `SET_GPS_DAYS,${gpsDays}`, `SET_OFFSET,${offset}`, `SET_CLIMATE,${$('#setting-climate').checked ? 1 : 0}`]) {
+  if (!Number.isInteger(interval) || interval < 1 || interval > 24 ||
+      !Number.isInteger(offset) || offset < -500 || offset > 500) {
+    throw new Error('設定值超出範圍');
+  }
+
+  let location = currentLocation;
+  if (!location || (currentLocationDeviceId && currentLocationDeviceId !== id)) {
+    const saved = await getDeviceConfig(id);
+    if (saved) {
+      location = {
+        latitude: saved.latitude,
+        longitude: saved.longitude,
+        accuracyM: saved.accuracyM,
+        locationRecordedAt: saved.locationRecordedAt,
+      };
+    }
+  }
+  if (!location) {
+    throw new Error('首次安裝請先按「取得手機 GPS 定位」，再寫入設定。');
+  }
+
+  const climateEnabled = $('#setting-climate').checked;
+  for (const command of [
+    `SET_ID,${id}`,
+    `SET_INTERVAL,${interval}`,
+    `SET_OFFSET,${offset}`,
+    `SET_CLIMATE,${climateEnabled ? 1 : 0}`,
+    `SET_TIME,${Math.floor(Date.now() / 1000)}`,
+  ]) {
     await sendCommand(command);
     await new Promise((r) => setTimeout(r, 100));
   }
-  showStatus('設定已送出；裝置名稱會在下次 BLE 啟動更新。');
+
+  const deviceConfig = {
+    deviceId: id,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    accuracyM: location.accuracyM,
+    locationRecordedAt: location.locationRecordedAt,
+    intervalHours: interval,
+    waterOffsetMm: offset,
+    climateEnabled,
+    firmwareVersion: info?.fw || 'UNKNOWN',
+    appVersion: APP_VERSION,
+    installedAt: Date.now(),
+  };
+  await saveDeviceConfig(deviceConfig);
+  currentLocation = location;
+  currentLocationDeviceId = id;
+  const cloud = await syncDeviceConfigsToCloud([deviceConfig]);
+  await renderRecords();
+  await loadDeviceLocation(id);
+  if (!cloud.configured) {
+    showStatus('設定已寫入裝置，GPS 位置已保存在手機；Supabase 尚未設定，之後會自動重試。', true);
+  } else if (cloud.pending) {
+    showStatus('設定已寫入裝置，GPS 位置已保存在手機；雲端登錄暫未完成，之後會自動重試。', true);
+  } else {
+    showStatus('設定與手機 GPS 位置已登錄 Supabase；裝置名稱會在下次 BLE 啟動更新。');
+  }
 }));
 $('#sync-time').addEventListener('click', () => guarded(() => sendCommand(`SET_TIME,${Math.floor(Date.now() / 1000)}`)));
-$('#gps-sync').addEventListener('click', () => guarded(() => sendCommand('GPS_SYNC')));
 $('#clear-roi').addEventListener('click', () => guarded(async () => {
   if (!confirm('清除目前尺規裁切範圍？下次量測會重新掃描完整畫面並學習外框。')) return;
   await sendCommand('CLEAR_ROI');
@@ -606,11 +898,16 @@ $('#test-cloud').addEventListener('click', () => guarded(async () => {
   }
 }));
 $('#sync-cloud').addEventListener('click', () => guarded(async () => {
-  const result = await syncPendingCloudRecords();
-  if (!result.configured) {
+  const { devices, measurements: result } = await syncAllPendingCloudData();
+  if (!result.configured || !devices.configured) {
     showStatus('尚未填入 Supabase 網址與 anon key；資料仍保留在手機。', true);
-  } else if (result.pending) {
-    showStatus(`雲端同步未完成，${result.pending} 筆仍保留在手機等待重試。`, true);
+  } else if (result.pending || devices.pending) {
+    const parts = [];
+    if (result.pending) parts.push(`${result.pending} 筆量測`);
+    if (devices.pending) parts.push(`${devices.pending} 項裝置設定`);
+    showStatus(`雲端同步未完成，${parts.join('、')}仍保留在手機等待重試。`, true);
+  } else if (devices.synced && !result.inserted) {
+    showStatus(`裝置位置與基本設定已同步（${devices.synced} 項）；量測已經是最新資料了。手機備份未刪除。`);
   } else if (!result.inserted) {
     showStatus('已經是最新資料了。手機備份未刪除。');
   } else if (result.duplicates) {
@@ -647,7 +944,9 @@ updateBleRuntime();
 // The ESP32-CAM GATT connection itself continues to use standard Web Bluetooth.
 window.addEventListener('beacio:ready', updateBleRuntime);
 window.addEventListener('beacio:extension:ready', updateBleRuntime);
-renderRecords().catch((error) => showStatus(error.message, true));
+renderRecords()
+  .then(() => syncAllPendingCloudData())
+  .catch((error) => showStatus(error.message, true));
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;

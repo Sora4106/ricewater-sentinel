@@ -7,4 +7,5 @@ self.RICE_SUPABASE_CONFIG = Object.freeze({
   url: 'https://wffyctbnhawfgnyhxiwe.supabase.co',
   anonKey: 'sb_publishable_dwhVdM5DtETHF-cIFgHgPA_kdsTpI_Y',
   table: 'rice_measurements',
+  deviceRpc: 'register_rice_device',
 });

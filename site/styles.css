@@ -81,6 +81,7 @@ input {
 .toggle input { width: auto; margin: 0; }
 .setting-note { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
 .setting-note strong { color: var(--ink); }
+#phone-location { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .secondary-actions { margin-top: 9px; }
 button {

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.6.1+16">
+<html lang="zh-Hant" data-release-version="0.7.0+1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -17,7 +17,7 @@
       <div class="mark" aria-hidden="true">水</div>
       <div>
         <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.6.1+16</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.7.0+1</strong></p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
@@ -30,8 +30,9 @@
       <article><span>手機已存</span><strong id="local-count">0</strong></article>
       <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
       <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-      <article><span>App 版本</span><strong id="app-version" data-app-version>0.6.1+16</strong></article>
+      <article><span>App 版本</span><strong id="app-version" data-app-version>0.7.0+1</strong></article>
       <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
+      <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
     </section>
 
     <section class="card">
@@ -39,15 +40,16 @@
       <div class="form-grid">
         <label>裝置 ID<input id="setting-id" maxlength="8" placeholder="RICE0001"></label>
         <label>讀取週期（小時）<input id="setting-interval" type="number" min="1" max="24" value="1"></label>
-        <label>GPS 校時週期（天）<input id="setting-gps" type="number" min="1" max="7" value="3"></label>
         <label>水深修正（mm）<input id="setting-offset" type="number" min="-500" max="500" value="0"></label>
       </div>
       <label class="toggle"><input id="setting-climate" type="checkbox"> 啟用 DHT22 溫溼度</label>
+      <p class="setting-note">首次安裝：將監控器固定完成並連接 BLE，設定裝置 ID，再取得手機 GPS 定位並寫入設定。</p>
+      <p class="setting-note">手機 GPS：<strong id="phone-location">尚未取得；定位只由手機上傳，ESP32 不含 GPS。</strong></p>
       <p class="setting-note">尺規裁切範圍：<strong id="roi-state">尚未學習</strong></p>
       <div class="actions">
-        <button id="save-settings">寫入設定</button>
+        <button id="get-location">取得手機 GPS 定位</button>
+        <button id="save-settings" class="primary">寫入設定並登錄位置</button>
         <button id="sync-time">以手機 UTC 校時</button>
-        <button id="gps-sync">立即 GPS 校時</button>
         <button id="clear-roi" class="danger">重新學習尺規位置</button>
       </div>
     </section>
@@ -55,7 +57,7 @@
     <section class="card">
       <div class="card-heading">
         <h2>量測與資料</h2>
-        <span class="card-version">系統版本 <strong data-app-version>0.6.1+16</strong></span>
+        <span class="card-version">系統版本 <strong data-app-version>0.7.0+1</strong></span>
       </div>
       <div class="actions">
         <button id="measure">立即量測</button>
@@ -87,7 +89,7 @@
   </main>
   <!-- The build value gives this public browser-safe configuration a distinct
        URL when it changes, without altering the HTML parser at runtime. -->
-  <script src="supabase-config.js?build=0.6.1-16"></script>
+  <script src="supabase-config.js?build=0.7.0-1"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>
