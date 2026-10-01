@@ -19,6 +19,44 @@ let expectedDownload = 0;
 let downloadLastSequence = 0;
 let dbPromise;
 
+function isIOSSafari() {
+  const userAgent = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/.test(userAgent) &&
+    !/CriOS|FxiOS|EdgiOS|OPiOS|GSA/.test(userAgent);
+  return isIOS && isSafari;
+}
+
+function hasWebBluetooth() {
+  return Boolean(navigator.bluetooth &&
+    typeof navigator.bluetooth.requestDevice === 'function');
+}
+
+function bluetoothUnavailableMessage() {
+  if (!self.isSecureContext) {
+    return '藍牙連線需要 HTTPS；請以已部署的網站開啟，不可直接使用檔案網址。';
+  }
+  if (isIOSSafari()) {
+    return 'iOS Safari 尚未取得藍牙功能。請安裝 Beacio，於 Safari 的「aA → 管理擴充功能」啟用，並允許此網站後重新開啟。';
+  }
+  return '此瀏覽器不支援 Web Bluetooth；請使用 Android Chrome／Edge，或 iOS Safari 搭配 Beacio。';
+}
+
+function updateBleRuntime() {
+  const target = $('#ble-runtime');
+  if (!target) return;
+  if (hasWebBluetooth()) {
+    target.textContent = isIOSSafari()
+      ? 'iOS Safari：已取得 Beacio 提供的 Web Bluetooth，可直接按「連接 BLE」。'
+      : '此瀏覽器已支援 Web Bluetooth，可直接按「連接 BLE」。';
+    target.className = 'ble-runtime ready';
+    return;
+  }
+  target.textContent = bluetoothUnavailableMessage();
+  target.className = 'ble-runtime notice';
+}
+
 function getSupabaseConfig() {
   const raw = self.RICE_SUPABASE_CONFIG || {};
   const url = String(raw.url || '').trim().replace(/\/+$/, '');
@@ -329,7 +367,7 @@ async function sendCommand(command) {
 }
 
 async function connect() {
-  if (!navigator.bluetooth) throw new Error('此瀏覽器不支援 Web Bluetooth；請使用 Android Chrome 並以 HTTPS 開啟');
+  if (!hasWebBluetooth()) throw new Error(bluetoothUnavailableMessage());
   device = await navigator.bluetooth.requestDevice({
     filters: [{ namePrefix: 'RiceWL-' }],
     optionalServices: [UUID.service],
@@ -487,6 +525,11 @@ $('#clear-local').addEventListener('click', () => guarded(async () => {
 }));
 
 $('#app-version').textContent = APP_VERSION;
+updateBleRuntime();
+// Beacio may announce that its Safari extension is ready just after page load.
+// The ESP32-CAM GATT connection itself continues to use standard Web Bluetooth.
+window.addEventListener('beacio:ready', updateBleRuntime);
+window.addEventListener('beacio:extension:ready', updateBleRuntime);
 renderRecords().catch((error) => showStatus(error.message, true));
 
 function registerServiceWorker() {

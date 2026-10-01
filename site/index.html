@@ -7,6 +7,9 @@
   <title>稻田水位監控器</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
+  <!-- Beacio supplies standard Web Bluetooth on iOS Safari when its Safari
+       extension is installed and enabled; native Web Bluetooth is unchanged. -->
+  <script src="https://beacio.com/beacio.js"></script>
 </head>
 <body>
   <main>
@@ -15,6 +18,7 @@
       <div>
         <h1>稻田水位監控器</h1>
         <p id="connection">尚未連線</p>
+        <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
       <button id="connect" class="primary">連接 BLE</button>
     </header>

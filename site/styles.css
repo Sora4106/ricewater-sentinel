@@ -31,6 +31,9 @@ h1, h2, p { margin: 0; }
 h1 { font: 700 clamp(1.4rem, 5vw, 2.1rem)/1.15 serif; letter-spacing: .04em; }
 h2 { margin-bottom: 16px; font-size: 1.05rem; }
 header p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
+.ble-runtime { max-width: 46rem; font-size: .78rem; }
+.ble-runtime.ready { color: var(--green); }
+.ble-runtime.notice { color: var(--danger); }
 header button { margin-left: auto; }
 
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin-bottom: 12px; }
