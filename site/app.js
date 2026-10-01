@@ -320,14 +320,15 @@ async function syncRecordsToCloud(records) {
   const config = getSupabaseConfig();
   if (!config) {
     setCloudSummary('未設定');
-    return { configured: false, synced: 0, pending: records.length };
+    return { configured: false, synced: 0, inserted: 0, duplicates: 0, pending: records.length };
   }
   if (!records.length) {
-    setCloudSummary('已同步');
-    return { configured: true, synced: 0, pending: 0 };
+    setCloudSummary('已是最新資料');
+    return { configured: true, synced: 0, inserted: 0, duplicates: 0, pending: 0 };
   }
 
   let synced = 0;
+  let duplicates = 0;
   try {
     // Normal uploads stay batched. If a retry contains an existing primary
     // key, retry that batch one-by-one so both existing and new records can be
@@ -347,24 +348,34 @@ async function syncRecordsToCloud(records) {
 
       for (const record of batch) {
         const singleResult = await insertCloudRecords(config, [record]);
+        const duplicate = isDuplicateInsert(singleResult.response, singleResult.detail);
         if (!singleResult.response.ok &&
-            !isDuplicateInsert(singleResult.response, singleResult.detail)) {
+            !duplicate) {
           throw new Error(`Supabase HTTP ${singleResult.response.status}${singleResult.detail ? `：${singleResult.detail}` : ''}`);
         }
+        if (duplicate) duplicates += 1;
         await markCloudRecords([record], 'synced');
         synced += 1;
       }
     }
-    setCloudSummary('已同步');
     await renderRecords();
-    return { configured: true, synced, pending: 0 };
+    const inserted = synced - duplicates;
+    setCloudSummary(inserted ? '已同步' : '已是最新資料');
+    return { configured: true, synced, inserted, duplicates, pending: 0 };
   } catch (error) {
     const unsynced = records.slice(synced);
     await markCloudRecords(unsynced, 'pending', error.message);
     setCloudSummary(`待重試 ${unsynced.length} 筆`, true,
                     cloudDiagnosticMessage(error.message));
     await renderRecords();
-    return { configured: true, synced, pending: unsynced.length, error };
+    return {
+      configured: true,
+      synced,
+      inserted: synced - duplicates,
+      duplicates,
+      pending: unsynced.length,
+      error,
+    };
   }
 }
 
@@ -600,8 +611,12 @@ $('#sync-cloud').addEventListener('click', () => guarded(async () => {
     showStatus('尚未填入 Supabase 網址與 anon key；資料仍保留在手機。', true);
   } else if (result.pending) {
     showStatus(`雲端同步未完成，${result.pending} 筆仍保留在手機等待重試。`, true);
+  } else if (!result.inserted) {
+    showStatus('已經是最新資料了。手機備份未刪除。');
+  } else if (result.duplicates) {
+    showStatus(`雲端同步完成：新增 ${result.inserted} 筆，${result.duplicates} 筆已經是最新資料。手機備份未刪除。`);
   } else {
-    showStatus(`雲端同步完成（${result.synced} 筆）。手機備份未刪除。`);
+    showStatus(`雲端同步完成（新增 ${result.inserted} 筆）。手機備份未刪除。`);
   }
 }));
 $('#export').addEventListener('click', () => guarded(async () => {
