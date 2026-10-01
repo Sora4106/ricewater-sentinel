@@ -336,6 +336,35 @@ async function syncPendingCloudRecords() {
   return syncRecordsToCloud(await getPendingCloudRecords());
 }
 
+async function testSupabaseConnection() {
+  const config = getSupabaseConfig();
+  if (!config) {
+    const message = 'Supabase 尚未設定 Project URL 或 publishable key。';
+    setCloudSummary('未設定', true, message);
+    showStatus(message, true);
+    return;
+  }
+
+  try {
+    // limit=0 verifies the configured table, key, HTTPS and CORS path without
+    // returning measurements or writing a test row.
+    const response = await fetch(
+      `${config.url}/rest/v1/${encodeURIComponent(config.table)}?select=device_id&limit=0`,
+      { method: 'GET', headers: { apikey: config.anonKey } },
+    );
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 240);
+      throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
+    }
+    setCloudSummary('連線正常');
+    showStatus(`Supabase 連線測試成功（HTTP ${response.status}）；未讀取或寫入量測資料。`);
+  } catch (error) {
+    const detail = cloudDiagnosticMessage(error.message);
+    setCloudSummary('連線失敗', true, detail);
+    showStatus('Supabase 連線測試失敗。', true);
+  }
+}
+
 function formatValue(value, divisor, suffix) {
   if (value === -32768 || value === 65535) return '—';
   return `${(value / divisor).toFixed(divisor === 100 ? 2 : 1)} ${suffix}`;
@@ -516,6 +545,7 @@ $('#clear-roi').addEventListener('click', () => guarded(async () => {
 $('#measure').addEventListener('click', () => guarded(() => sendCommand('MEASURE')));
 $('#download').addEventListener('click', () => guarded(async () => { incoming = []; expectedDownload = 0; await sendCommand('DOWNLOAD'); }));
 $('#sleep').addEventListener('click', () => guarded(() => sendCommand('SLEEP')));
+$('#test-cloud-connection').addEventListener('click', () => guarded(testSupabaseConnection));
 $('#test-cloud').addEventListener('click', () => guarded(async () => {
   const testRecord = createCloudTestRecord();
   await saveRecords([testRecord]);
