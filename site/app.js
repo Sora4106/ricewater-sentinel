@@ -538,18 +538,21 @@ async function testSupabaseConnection() {
   }
 
   try {
-    // limit=0 verifies the configured table, key, HTTPS and CORS path without
-    // returning measurements or writing a test row.
+    // The Auth settings endpoint verifies the project URL, publishable key,
+    // HTTPS and CORS without requiring table permission or writing a test row.
     const response = await fetch(
-      `${config.url}/rest/v1/${encodeURIComponent(config.table)}?select=device_id&limit=0`,
-      { method: 'GET', headers: { apikey: config.anonKey } },
+      `${config.url}/auth/v1/settings`,
+      {
+        method: 'GET',
+        headers: { apikey: config.anonKey },
+      },
     );
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 240);
       throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
     }
     setCloudSummary('連線正常');
-    showStatus(`Supabase 連線測試成功（HTTP ${response.status}）；此按鈕只檢查連線，不檢查資料寫入權限。`);
+    showStatus(`Supabase 連線測試成功（HTTP ${response.status}）；此按鈕只檢查專案與 API key，不檢查資料表或寫入權限。`);
   } catch (error) {
     const detail = cloudDiagnosticMessage(error.message);
     setCloudSummary('連線失敗', true, detail);
@@ -822,6 +825,7 @@ $('#save-settings').addEventListener('click', () => guarded(async () => {
 
   let location = currentLocation;
   if (!location || (currentLocationDeviceId && currentLocationDeviceId !== id)) {
+    location = null;
     const saved = await getDeviceConfig(id);
     if (saved) {
       location = {
