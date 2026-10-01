@@ -306,7 +306,6 @@ async function syncRecordsToCloud(records) {
           method: 'POST',
           headers: {
             apikey: config.anonKey,
-            Authorization: `Bearer ${config.anonKey}`,
             'Content-Type': 'application/json',
             Prefer: 'resolution=ignore-duplicates,return=minimal',
           },
