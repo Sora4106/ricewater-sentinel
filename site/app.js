@@ -20,6 +20,8 @@ let downloadLastSequence = 0;
 let dbPromise;
 let currentLocation = null;
 let currentLocationDeviceId = null;
+let cloudChartState = null;
+let chartResizeTimer = null;
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -65,11 +67,13 @@ function getSupabaseConfig() {
   const anonKey = String(raw.anonKey || '').trim();
   const table = String(raw.table || 'rice_measurements').trim();
   const deviceRpc = String(raw.deviceRpc || 'register_rice_device').trim();
+  const chartRpc = String(raw.chartRpc || 'get_rice_chart').trim();
   if (!url || !anonKey) return null;
   if (!/^https:\/\//.test(url) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(table) ||
-      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(deviceRpc)) return null;
-  return { url, anonKey, table, deviceRpc };
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(deviceRpc) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(chartRpc)) return null;
+  return { url, anonKey, table, deviceRpc, chartRpc };
 }
 
 function setCloudDetail(message = '') {
@@ -95,7 +99,7 @@ function cloudDiagnosticMessage(errorMessage) {
     return '雲端診斷：HTTP 403，資料表的 RLS 新增權限拒絕此筆資料。';
   }
   if (/Supabase HTTP 404/.test(raw)) {
-    return '雲端診斷：HTTP 404，找不到 Supabase 資料表或裝置登錄函式；請確認已執行最新 SQL。';
+    return '雲端診斷：HTTP 404，找不到 Supabase 資料表、裝置登錄或圖表函式；請確認已執行最新 SQL。';
   }
   if (/Supabase HTTP 409/.test(raw)) {
     return '雲端診斷：HTTP 409，資料表主鍵或 upsert 設定不符合預期。';
@@ -560,6 +564,291 @@ async function testSupabaseConnection() {
   }
 }
 
+const CLOUD_CHARTS = [
+  {
+    canvasId: 'chart-water',
+    readoutId: 'chart-water-readout',
+    field: 'water_height_cm',
+    label: '水位高度／水深',
+    unit: 'cm',
+    color: '#16745a',
+    allowNegative: false,
+  },
+  {
+    canvasId: 'chart-battery',
+    readoutId: 'chart-battery-readout',
+    field: 'battery_percent',
+    label: '電池電量',
+    unit: '%',
+    color: '#c18a18',
+    allowNegative: false,
+  },
+  {
+    canvasId: 'chart-temperature',
+    readoutId: 'chart-temperature-readout',
+    field: 'temperature_c',
+    label: '溫度',
+    unit: '°C',
+    color: '#b94b3d',
+    allowNegative: true,
+  },
+  {
+    canvasId: 'chart-humidity',
+    readoutId: 'chart-humidity-readout',
+    field: 'humidity_percent',
+    label: '相對濕度',
+    unit: '%',
+    color: '#367aa2',
+    allowNegative: false,
+  },
+];
+
+function setChartStatus(message, bad = false) {
+  const target = $('#chart-status');
+  target.textContent = message;
+  target.className = bad ? 'chart-status error' : 'chart-status';
+}
+
+function localIsoDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function selectedChartPeriod() {
+  const range = $('#chart-range').value;
+  const parts = $('#chart-date').value.split('-').map(Number);
+  if (parts.length !== 3 || parts.some((value) => !Number.isInteger(value))) {
+    throw new Error('請選擇圖表日期。');
+  }
+  const [year, month, day] = parts;
+  const verified = new Date(year, month - 1, day);
+  if (verified.getFullYear() !== year || verified.getMonth() + 1 !== month ||
+      verified.getDate() !== day) {
+    throw new Error('圖表日期無效。');
+  }
+  return { range, year, month, day };
+}
+
+function chartPeriodText(period) {
+  if (period.range === 'year') return `${period.year} 年（每月平均，共 12 點）`;
+  if (period.range === 'month') {
+    const days = new Date(period.year, period.month, 0).getDate();
+    return `${period.year} 年 ${period.month} 月（每日平均，共 ${days} 點）`;
+  }
+  return `${period.year} 年 ${period.month} 月 ${period.day} 日（每小時平均，共 24 點）`;
+}
+
+function updateChartPeriodDescription() {
+  try {
+    const period = selectedChartPeriod();
+    $('#chart-period-description').textContent =
+      `${chartPeriodText(period)}；時間分組採 Asia/Taipei。`;
+  } catch (_error) {
+    $('#chart-period-description').textContent = '請選擇有效日期。';
+  }
+}
+
+function numericChartValue(row, field) {
+  if (row[field] === null || row[field] === undefined || row[field] === '') return null;
+  const value = Number(row[field]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function chartYAxis(rows, definition) {
+  const values = rows
+    .map((row) => numericChartValue(row, definition.field))
+    .filter((value) => value !== null);
+  const highest = values.length ? Math.max(...values) : 0;
+  const lowest = values.length ? Math.min(...values) : 0;
+  const maximum = Math.max(20, Math.ceil(highest / 10) * 10 + 20);
+  const minimum = definition.allowNegative && lowest < 0
+    ? Math.floor(lowest / 10) * 10
+    : 0;
+  return { minimum, maximum, hasData: values.length > 0 };
+}
+
+function renderCloudChart(definition, rows) {
+  const canvas = $(`#${definition.canvasId}`);
+  const readout = $(`#${definition.readoutId}`);
+  const scroll = canvas.parentElement;
+  const pointWidth = rows.length > 24 ? 43 : rows.length > 12 ? 48 : 64;
+  const cssWidth = Math.max(scroll.clientWidth || 640, 100 + rows.length * pointWidth);
+  const cssHeight = 300;
+  const pixelRatio = Math.max(1, Math.min(self.devicePixelRatio || 1, 2));
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  canvas.width = Math.round(cssWidth * pixelRatio);
+  canvas.height = Math.round(cssHeight * pixelRatio);
+
+  const context = canvas.getContext('2d');
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+
+  const margin = { left: 58, right: 22, top: 20, bottom: 50 };
+  const plotWidth = cssWidth - margin.left - margin.right;
+  const plotHeight = cssHeight - margin.top - margin.bottom;
+  const axis = chartYAxis(rows, definition);
+  const ySpan = axis.maximum - axis.minimum;
+  const xAt = (index) => margin.left + (rows.length <= 1
+    ? plotWidth / 2
+    : (index / (rows.length - 1)) * plotWidth);
+  const yAt = (value) => margin.top + ((axis.maximum - value) / ySpan) * plotHeight;
+
+  context.font = '12px system-ui, -apple-system, "Noto Sans TC", sans-serif';
+  context.lineWidth = 1;
+  context.textAlign = 'right';
+  context.textBaseline = 'middle';
+  for (let tick = axis.minimum; tick <= axis.maximum; tick += 10) {
+    const y = yAt(tick);
+    context.strokeStyle = tick === 0 ? '#9aac9f' : '#e4e9e4';
+    context.beginPath();
+    context.moveTo(margin.left, y);
+    context.lineTo(cssWidth - margin.right, y);
+    context.stroke();
+    context.fillStyle = '#637a72';
+    context.fillText(String(tick), margin.left - 9, y);
+  }
+
+  context.textAlign = 'center';
+  context.textBaseline = 'top';
+  rows.forEach((row, index) => {
+    const x = xAt(index);
+    context.strokeStyle = '#cfd8d1';
+    context.beginPath();
+    context.moveTo(x, cssHeight - margin.bottom);
+    context.lineTo(x, cssHeight - margin.bottom + 5);
+    context.stroke();
+    context.fillStyle = '#637a72';
+    context.fillText(String(row.bucket_label), x, cssHeight - margin.bottom + 9);
+  });
+
+  context.strokeStyle = definition.color;
+  context.lineWidth = 2.5;
+  context.beginPath();
+  let previousWasValue = false;
+  rows.forEach((row, index) => {
+    const value = numericChartValue(row, definition.field);
+    if (value === null) {
+      previousWasValue = false;
+      return;
+    }
+    const x = xAt(index);
+    const y = yAt(value);
+    if (previousWasValue) context.lineTo(x, y);
+    else context.moveTo(x, y);
+    previousWasValue = true;
+  });
+  context.stroke();
+
+  rows.forEach((row, index) => {
+    const value = numericChartValue(row, definition.field);
+    if (value === null) return;
+    context.fillStyle = '#ffffff';
+    context.strokeStyle = definition.color;
+    context.lineWidth = 2.5;
+    context.beginPath();
+    context.arc(xAt(index), yAt(value), 4, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  });
+
+  const defaultText = axis.hasData
+    ? '移動或點選資料點可查看時段平均值。'
+    : `此期間沒有${definition.label}資料。`;
+  readout.textContent = defaultText;
+
+  const showPoint = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const ratio = (pointerX - margin.left) / plotWidth;
+    const index = Math.max(0, Math.min(rows.length - 1,
+      Math.round(ratio * Math.max(0, rows.length - 1))));
+    const row = rows[index];
+    const value = numericChartValue(row, definition.field);
+    const count = Number(row.sample_count || 0);
+    readout.textContent = value === null
+      ? `${row.bucket_label}：沒有資料（該時段共 ${count} 筆量測）`
+      : `${row.bucket_label}：${value.toFixed(2)} ${definition.unit}（${count} 筆平均）`;
+  };
+  canvas.onpointermove = showPoint;
+  canvas.onpointerdown = showPoint;
+  canvas.onpointerleave = () => { readout.textContent = defaultText; };
+}
+
+function renderCloudCharts() {
+  if (!cloudChartState) return;
+  CLOUD_CHARTS.forEach((definition) =>
+    renderCloudChart(definition, cloudChartState.rows));
+}
+
+async function loadCloudCharts() {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error('Supabase 尚未設定 Project URL 或 publishable key。');
+  const deviceId = $('#chart-device-id').value.trim();
+  if (!/^[A-Za-z0-9_-]{1,8}$/.test(deviceId)) {
+    throw new Error('圖表裝置 ID 必須是 1～8 位英數、- 或 _。');
+  }
+  const period = selectedChartPeriod();
+  setChartStatus('正在直接讀取 Supabase 圖表資料…');
+
+  const response = await fetch(
+    `${config.url}/rest/v1/rpc/${encodeURIComponent(config.chartRpc)}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: config.anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_device_id: deviceId,
+        p_range_type: period.range,
+        p_year: period.year,
+        p_month: period.range === 'year' ? null : period.month,
+        p_day: period.range === 'day' ? period.day : null,
+      }),
+    },
+  );
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 240);
+    throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
+  }
+  const payload = await response.json();
+  if (!Array.isArray(payload)) throw new Error('Supabase 圖表回應格式不正確。');
+
+  const expectedPoints = period.range === 'year'
+    ? 12
+    : period.range === 'month'
+      ? new Date(period.year, period.month, 0).getDate()
+      : 24;
+  if (payload.length !== expectedPoints) {
+    throw new Error(`雲端圖表點數不正確（收到 ${payload.length}，預期 ${expectedPoints}）。`);
+  }
+
+  cloudChartState = { rows: payload, period, deviceId };
+  localStorage.setItem('rice-chart-device-id', deviceId);
+  renderCloudCharts();
+  const samples = payload.reduce((total, row) => total + Number(row.sample_count || 0), 0);
+  setChartStatus(
+    `${deviceId}｜${chartPeriodText(period)}｜Supabase 共納入 ${samples} 筆量測。`,
+  );
+}
+
+async function initializeCloudCharts() {
+  $('#chart-date').value = localIsoDate();
+  let deviceId = localStorage.getItem('rice-chart-device-id') || '';
+  if (!deviceId) {
+    const configs = await getDeviceConfigs();
+    const latest = [...configs].sort((a, b) =>
+      (b.installedAt || 0) - (a.installedAt || 0))[0];
+    deviceId = latest?.deviceId || '';
+  }
+  $('#chart-device-id').value = deviceId;
+  updateChartPeriodDescription();
+  if (deviceId) await loadCloudCharts();
+}
+
 function formatValue(value, divisor, suffix) {
   if (value === -32768 || value === 65535) return '—';
   return `${(value / divisor).toFixed(divisor === 100 ? 2 : 1)} ${suffix}`;
@@ -692,6 +981,7 @@ async function readInfo() {
   $('#device-time').textContent = info.utc ? new Date(info.utc * 1000).toLocaleString() : '無效';
   $('#firmware-version').textContent = info.fw || '—';
   $('#setting-id').value = info.id;
+  if (!$('#chart-device-id').value) $('#chart-device-id').value = info.id;
   $('#setting-interval').value = info.interval_h;
   $('#setting-offset').value = info.offset_mm;
   $('#setting-climate').checked = info.climate;
@@ -805,6 +1095,9 @@ async function guarded(action) {
 }
 
 $('#connect').addEventListener('click', () => guarded(connect));
+$('#load-cloud-charts').addEventListener('click', () => guarded(loadCloudCharts));
+$('#chart-range').addEventListener('change', updateChartPeriodDescription);
+$('#chart-date').addEventListener('change', updateChartPeriodDescription);
 $('#refresh').addEventListener('click', () => guarded(async () => { await sendCommand('GET_INFO'); await new Promise((r) => setTimeout(r, 150)); await readInfo(); }));
 $('#get-location').addEventListener('click', () => guarded(async () => {
   showStatus('正在取得手機 GPS 定位…');
@@ -948,9 +1241,17 @@ updateBleRuntime();
 // The ESP32-CAM GATT connection itself continues to use standard Web Bluetooth.
 window.addEventListener('beacio:ready', updateBleRuntime);
 window.addEventListener('beacio:extension:ready', updateBleRuntime);
+window.addEventListener('resize', () => {
+  if (!cloudChartState) return;
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(renderCloudCharts, 120);
+});
 renderRecords()
   .then(() => syncAllPendingCloudData())
   .catch((error) => showStatus(error.message, true));
+initializeCloudCharts().catch((error) => {
+  setChartStatus(cloudDiagnosticMessage(error.message) || error.message, true);
+});
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;

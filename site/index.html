@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.7.0+2">
+<html lang="zh-Hant" data-release-version="0.8.0+1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -17,7 +17,7 @@
       <div class="mark" aria-hidden="true">水</div>
       <div>
         <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.7.0+2</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.8.0+1</strong></p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
@@ -30,9 +30,53 @@
       <article><span>手機已存</span><strong id="local-count">0</strong></article>
       <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
       <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-      <article><span>App 版本</span><strong id="app-version" data-app-version>0.7.0+2</strong></article>
+      <article><span>App 版本</span><strong id="app-version" data-app-version>0.8.0+1</strong></article>
       <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
       <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
+    </section>
+
+    <section class="card" id="cloud-charts">
+      <div class="card-heading">
+        <h2>雲端歷史圖表</h2>
+        <span class="card-version">僅讀取 Supabase，不使用 BLE 或手機下載資料</span>
+      </div>
+      <div class="chart-controls">
+        <label>裝置 ID<input id="chart-device-id" maxlength="8" placeholder="RICE0001"></label>
+        <label>顯示範圍
+          <select id="chart-range">
+            <option value="day">日（0～23 時）</option>
+            <option value="month">月（1～28／31 日）</option>
+            <option value="year">年（1～12 月）</option>
+          </select>
+        </label>
+        <label>選擇日期<input id="chart-date" type="date"></label>
+        <button id="load-cloud-charts" class="primary">讀取雲端圖表</button>
+      </div>
+      <p id="chart-period-description" class="setting-note">日視圖會依台灣時間顯示 0～23 時的平均值。</p>
+      <p id="chart-status" class="chart-status" role="status">輸入裝置 ID 後即可讀取，不需要連接 BLE。</p>
+
+      <div class="chart-grid">
+        <article class="chart-panel">
+          <h3>水位高度／水深（cm）</h3>
+          <div class="chart-scroll"><canvas id="chart-water" height="300"></canvas></div>
+          <p id="chart-water-readout" class="chart-readout">尚未讀取</p>
+        </article>
+        <article class="chart-panel">
+          <h3>電池電量（%）</h3>
+          <div class="chart-scroll"><canvas id="chart-battery" height="300"></canvas></div>
+          <p id="chart-battery-readout" class="chart-readout">資料庫已預留欄位；舊資料可能沒有電池數值。</p>
+        </article>
+        <article class="chart-panel">
+          <h3>溫度（°C）</h3>
+          <div class="chart-scroll"><canvas id="chart-temperature" height="300"></canvas></div>
+          <p id="chart-temperature-readout" class="chart-readout">尚未讀取</p>
+        </article>
+        <article class="chart-panel">
+          <h3>相對濕度（%）</h3>
+          <div class="chart-scroll"><canvas id="chart-humidity" height="300"></canvas></div>
+          <p id="chart-humidity-readout" class="chart-readout">尚未讀取</p>
+        </article>
+      </div>
     </section>
 
     <section class="card">
@@ -57,7 +101,7 @@
     <section class="card">
       <div class="card-heading">
         <h2>量測與資料</h2>
-        <span class="card-version">系統版本 <strong data-app-version>0.7.0+2</strong></span>
+        <span class="card-version">系統版本 <strong data-app-version>0.8.0+1</strong></span>
       </div>
       <div class="actions">
         <button id="measure">立即量測</button>
@@ -89,7 +133,7 @@
   </main>
   <!-- The build value gives this public browser-safe configuration a distinct
        URL when it changes, without altering the HTML parser at runtime. -->
-  <script src="supabase-config.js?build=0.7.0-2"></script>
+  <script src="supabase-config.js?build=0.8.0-1"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>

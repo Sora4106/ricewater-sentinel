@@ -72,7 +72,7 @@ header button { margin-left: auto; }
 .card { padding: 20px; margin-top: 12px; }
 .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 label { color: var(--muted); font-size: .82rem; }
-input {
+input, select {
   display: block; width: 100%; margin-top: 6px; padding: 11px 12px;
   color: var(--ink); background: white; border: 1px solid var(--line);
   border-radius: 10px; font: inherit;
@@ -82,6 +82,34 @@ input {
 .setting-note { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
 .setting-note strong { color: var(--ink); }
 #phone-location { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.chart-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(170px, .8fr) minmax(170px, .8fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.chart-controls button { min-width: 150px; }
+.chart-status { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
+.chart-status.error { color: var(--danger); }
+.chart-grid { display: grid; gap: 14px; }
+.chart-panel {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+.chart-panel h3 { margin: 0 0 8px; font-size: .96rem; }
+.chart-scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
+.chart-scroll canvas { display: block; height: 300px; }
+.chart-readout {
+  min-height: 1.5em;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+}
 .actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .secondary-actions { margin-top: 9px; }
 button {
@@ -111,6 +139,12 @@ th:nth-child(2), td:nth-child(2) { text-align: left; }
   header button { width: 100%; margin-left: 0; }
   .summary { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: repeat(2, 1fr); }
+  .chart-controls { grid-template-columns: 1fr 1fr; }
+  .chart-controls button { width: 100%; min-width: 0; }
   .card-heading { align-items: flex-start; flex-direction: column; gap: 0; }
   .card { padding: 16px; }
+}
+
+@media (max-width: 480px) {
+  .chart-controls { grid-template-columns: 1fr; }
 }
