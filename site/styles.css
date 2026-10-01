@@ -31,6 +31,20 @@ h1, h2, p { margin: 0; }
 h1 { font: 700 clamp(1.4rem, 5vw, 2.1rem)/1.15 serif; letter-spacing: .04em; }
 h2 { margin-bottom: 16px; font-size: 1.05rem; }
 header p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
+.release-version {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 7px;
+  padding: 3px 9px;
+  border: 1px solid #b9d9cc;
+  border-radius: 999px;
+  color: var(--green);
+  background: #edf8f2;
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+}
+.release-version strong { color: inherit; }
 .ble-runtime { max-width: 46rem; font-size: .78rem; }
 .ble-runtime.ready { color: var(--green); }
 .ble-runtime.notice { color: var(--danger); }

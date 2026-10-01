@@ -559,7 +559,9 @@ $('#clear-local').addEventListener('click', () => guarded(async () => {
   showStatus('手機本機資料已清除。');
 }));
 
-$('#app-version').textContent = APP_VERSION;
+document.querySelectorAll('[data-app-version]').forEach((element) => {
+  element.textContent = APP_VERSION;
+});
 updateBleRuntime();
 // Beacio may announce that its Safari extension is ready just after page load.
 // The ESP32-CAM GATT connection itself continues to use standard Web Bluetooth.
