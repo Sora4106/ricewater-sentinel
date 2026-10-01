@@ -81,7 +81,9 @@
       </div>
     </section>
   </main>
-  <script src="supabase-config.js?v=0.6.1+5"></script>
+  <!-- Supabase config is intentionally requested with a fresh URL each launch.
+       This prevents Safari PWA from pairing a new UI with an older API key. -->
+  <script>document.write('<script src="supabase-config.js?runtime=' + Date.now() + '"><\\/script>');</script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>
