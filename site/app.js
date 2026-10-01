@@ -286,6 +286,36 @@ async function markCloudRecords(records, status, errorMessage = null) {
   });
 }
 
+function cloudRequestBody(records) {
+  // JSON.stringify normally removes object keys whose values are undefined.
+  // Older local records may lack optional sensor fields; keeping those keys as
+  // null ensures every PostgREST batch row has exactly the same shape.
+  return JSON.stringify(records.map(toCloudRecord), (_field, value) => (
+    value === undefined ? null : value
+  ));
+}
+
+async function insertCloudRecords(config, records) {
+  const response = await fetch(
+    `${config.url}/rest/v1/${encodeURIComponent(config.table)}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: config.anonKey,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: cloudRequestBody(records),
+    },
+  );
+  const detail = response.ok ? '' : (await response.text()).slice(0, 240);
+  return { response, detail };
+}
+
+function isDuplicateInsert(response, detail) {
+  return response.status === 409 && /23505|duplicate key/i.test(detail);
+}
+
 async function syncRecordsToCloud(records) {
   const config = getSupabaseConfig();
   if (!config) {
@@ -299,34 +329,31 @@ async function syncRecordsToCloud(records) {
 
   let synced = 0;
   try {
-    // Keep batches modest for intermittent field-network connections.  The
-    // composite primary key and ignore-duplicates preference make retries safe.
+    // Normal uploads stay batched. If a retry contains an existing primary
+    // key, retry that batch one-by-one so both existing and new records can be
+    // marked synced without granting anonymous SELECT access.
     for (let offset = 0; offset < records.length; offset += 100) {
       const batch = records.slice(offset, offset + 100);
-      const response = await fetch(
-        `${config.url}/rest/v1/${encodeURIComponent(config.table)}?on_conflict=device_id,sequence`,
-        {
-          method: 'POST',
-          headers: {
-            apikey: config.anonKey,
-            'Content-Type': 'application/json',
-            Prefer: 'resolution=ignore-duplicates,return=minimal',
-          },
-          // JSON.stringify normally removes object keys whose values are
-          // undefined.  Older local records may lack optional sensor fields;
-          // keeping those keys as null ensures every PostgREST batch row has
-          // exactly the same shape.
-          body: JSON.stringify(batch.map(toCloudRecord), (_field, value) => (
-            value === undefined ? null : value
-          )),
-        },
-      );
-      if (!response.ok) {
-        const detail = (await response.text()).slice(0, 240);
-        throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
+      const batchResult = await insertCloudRecords(config, batch);
+      if (batchResult.response.ok) {
+        await markCloudRecords(batch, 'synced');
+        synced += batch.length;
+        continue;
       }
-      await markCloudRecords(batch, 'synced');
-      synced += batch.length;
+
+      if (!isDuplicateInsert(batchResult.response, batchResult.detail)) {
+        throw new Error(`Supabase HTTP ${batchResult.response.status}${batchResult.detail ? `：${batchResult.detail}` : ''}`);
+      }
+
+      for (const record of batch) {
+        const singleResult = await insertCloudRecords(config, [record]);
+        if (!singleResult.response.ok &&
+            !isDuplicateInsert(singleResult.response, singleResult.detail)) {
+          throw new Error(`Supabase HTTP ${singleResult.response.status}${singleResult.detail ? `：${singleResult.detail}` : ''}`);
+        }
+        await markCloudRecords([record], 'synced');
+        synced += 1;
+      }
     }
     setCloudSummary('已同步');
     await renderRecords();
