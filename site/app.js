@@ -1251,9 +1251,10 @@ async function captureCalibrationImage() {
   calibrationImageTransfer = null;
   $('#calibration-progress').value = 0;
   $('#capture-calibration').disabled = true;
-  setCalibrationStatus(info?.test_mode
-    ? '正在傳送「拍照並回傳」測試指令，不會啟動相機…'
-    : '正在請求ESP32-CAM拍攝校正照片…');
+  const photoCaptureEnabled = Boolean(info?.photo_test) || !info?.test_mode;
+  setCalibrationStatus(photoCaptureEnabled
+    ? '正在拍照測試；ESP32-CAM 會實際拍攝灰階圖片並經 BLE 回傳…'
+    : '正在傳送「拍照並回傳」測試指令，不會啟動相機…');
   try {
     await sendCommand('CAL_IMAGE');
   } catch (error) {
@@ -1275,12 +1276,13 @@ async function readInfo() {
   $('#setting-interval').value = info.interval_h;
   $('#setting-offset').value = info.offset_mm;
   $('#setting-climate').checked = info.climate;
-  $('#capture-calibration').textContent = info.test_mode
-    ? '測試拍照指令（不拍照）'
-    : '圖片校正（取得照片）';
-  $('#calibration-description').textContent = info.test_mode
-    ? '目前為 BLE 連線測試模式：按鈕只要求晶片回覆已收到「拍照並回傳」指令，不會啟動相機或保存照片。'
-    : '先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；暗場或辨識不清時會自動使用LED補光。';
+  const photoCaptureEnabled = Boolean(info.photo_test) || !info.test_mode;
+  $('#capture-calibration').textContent = photoCaptureEnabled
+    ? '拍照測試並回傳'
+    : '測試拍照指令（不拍照）';
+  $('#calibration-description').textContent = photoCaptureEnabled
+    ? '此按鈕會實際拍攝 ESP32-CAM 灰階照片並回傳到手機；暗場或辨識不清時會自動使用 LED 補光。'
+    : '目前為 BLE 連線測試模式：按鈕只要求晶片回覆已收到「拍照並回傳」指令，不會啟動相機或保存照片。';
   $('#roi-state').textContent = info.roi_valid
     ? `已學習（x ${info.roi[0]}, y ${info.roi[1]}, w ${info.roi[2]}, h ${info.roi[3]} ‰）`
     : '尚未學習；下次量測會掃描完整畫面';
@@ -1510,10 +1512,11 @@ async function connect() {
   await readInfo();
   $('#connection').textContent = `已連接 ${device.name}`;
   $('#capture-calibration').disabled = !chars.image;
+  const photoCaptureEnabled = Boolean(info?.photo_test) || !info?.test_mode;
   setCalibrationStatus(chars.image
-    ? (info?.test_mode
-      ? '已連線；目前只測試拍照指令往返，不會實際拍照。'
-      : '已連線，可按「圖片校正」取得目前相機畫面。')
+    ? (photoCaptureEnabled
+      ? '已連線；可按「拍照測試並回傳」取得目前相機畫面。'
+      : '已連線；目前只測試拍照指令往返，不會實際拍照。')
     : '目前韌體沒有校正影像通道，請更新ESP32-CAM韌體。', !chars.image);
   showStatus(info?.provisioned
     ? '連線完成，已使用手機 UTC 校正裝置時間。'
