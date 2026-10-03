@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.9.0+1">
+<html lang="zh-Hant" data-release-version="0.9.0+2">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -17,7 +17,7 @@
       <div class="mark" aria-hidden="true">水</div>
       <div>
         <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.9.0+1</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.9.0+2</strong></p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
@@ -30,7 +30,8 @@
       <article><span>手機已存</span><strong id="local-count">0</strong></article>
       <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
       <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-      <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+1</strong></article>
+      <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+2</strong></article>
+      <article><span>首次設定</span><strong id="device-setup-status">—</strong></article>
       <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
       <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
     </section>
@@ -84,7 +85,7 @@
         <h2>圖片校正</h2>
         <span class="card-version">照片只保存在此手機</span>
       </div>
-      <p class="setting-note">先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；暗場或辨識不清時會自動使用LED補光。</p>
+      <p id="calibration-description" class="setting-note">先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；暗場或辨識不清時會自動使用LED補光。</p>
       <div class="actions">
         <button id="capture-calibration" class="primary" disabled>圖片校正（取得照片）</button>
       </div>
@@ -112,6 +113,7 @@
       </div>
       <label class="toggle"><input id="setting-climate" type="checkbox"> 啟用 DHT22 溫溼度</label>
       <p class="setting-note">首次安裝：將監控器固定完成並連接 BLE，設定裝置 ID，再取得手機 GPS 定位並寫入設定。</p>
+      <p class="setting-note">連線測試階段的韌體預設睡眠為 1 分鐘；首次設定完成前不會自動拍照或睡眠。</p>
       <p class="setting-note">手機 GPS：<strong id="phone-location">尚未取得；定位只由手機上傳，ESP32 不含 GPS。</strong></p>
       <p class="setting-note">尺規裁切範圍：<strong id="roi-state">尚未學習</strong></p>
       <div class="actions">
@@ -125,7 +127,7 @@
     <section class="card">
       <div class="card-heading">
         <h2>量測與資料</h2>
-        <span class="card-version">系統版本 <strong data-app-version>0.9.0+1</strong></span>
+        <span class="card-version">系統版本 <strong data-app-version>0.9.0+2</strong></span>
       </div>
       <div class="actions">
         <button id="measure">立即量測</button>
@@ -157,7 +159,7 @@
   </main>
   <!-- The build value gives this public browser-safe configuration a distinct
        URL when it changes, without altering the HTML parser at runtime. -->
-  <script src="supabase-config.js?build=0.9.0-1"></script>
+  <script src="supabase-config.js?build=0.9.0-2"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>

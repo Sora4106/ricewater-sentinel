@@ -1237,7 +1237,9 @@ async function captureCalibrationImage() {
   calibrationImageTransfer = null;
   $('#calibration-progress').value = 0;
   $('#capture-calibration').disabled = true;
-  setCalibrationStatus('正在請求ESP32-CAM拍攝校正照片…');
+  setCalibrationStatus(info?.test_mode
+    ? '正在傳送「拍照並回傳」測試指令，不會啟動相機…'
+    : '正在請求ESP32-CAM拍攝校正照片…');
   try {
     await sendCommand('CAL_IMAGE');
   } catch (error) {
@@ -1253,11 +1255,18 @@ async function readInfo() {
   $('#device-count').textContent = info.records;
   $('#device-time').textContent = info.utc ? new Date(info.utc * 1000).toLocaleString() : '無效';
   $('#firmware-version').textContent = info.fw || '—';
+  $('#device-setup-status').textContent = info.provisioned ? '已完成' : '等待設定';
   $('#setting-id').value = info.id;
   if (!$('#chart-device-id').value) $('#chart-device-id').value = info.id;
   $('#setting-interval').value = info.interval_h;
   $('#setting-offset').value = info.offset_mm;
   $('#setting-climate').checked = info.climate;
+  $('#capture-calibration').textContent = info.test_mode
+    ? '測試拍照指令（不拍照）'
+    : '圖片校正（取得照片）';
+  $('#calibration-description').textContent = info.test_mode
+    ? '目前為 BLE 連線測試模式：按鈕只要求晶片回覆已收到「拍照並回傳」指令，不會啟動相機或保存照片。'
+    : '先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；暗場或辨識不清時會自動使用LED補光。';
   $('#roi-state').textContent = info.roi_valid
     ? `已學習（x ${info.roi[0]}, y ${info.roi[1]}, w ${info.roi[2]}, h ${info.roi[3]} ‰）`
     : '尚未學習；下次量測會掃描完整畫面';
@@ -1313,9 +1322,13 @@ async function connect() {
   $('#connection').textContent = `已連接 ${device.name}`;
   $('#capture-calibration').disabled = !chars.image;
   setCalibrationStatus(chars.image
-    ? '已連線，可按「圖片校正」取得目前相機畫面。'
+    ? (info?.test_mode
+      ? '已連線；目前只測試拍照指令往返，不會實際拍照。'
+      : '已連線，可按「圖片校正」取得目前相機畫面。')
     : '目前韌體沒有校正影像通道，請更新ESP32-CAM韌體。', !chars.image);
-  showStatus('連線完成，已使用手機 UTC 校正裝置時間。');
+  showStatus(info?.provisioned
+    ? '連線完成，已使用手機 UTC 校正裝置時間。'
+    : '連線完成；裝置尚未完成首次設定，因此不會自動拍照或睡眠。');
   // Retry phone-backed records whenever a field worker opens the app; this
   // does not need, and never asks, the ESP32-CAM to use Wi-Fi.
   syncAllPendingCloudData().catch(() => setCloudSummary('待重試', true));
@@ -1359,7 +1372,16 @@ async function finishDownload(lastSequence) {
 
 function onEvent(event) {
   const message = decoder.decode(event.target.value);
-  if (message === 'IMG_WAIT') {
+  if (message === 'TEST,CAL_IMAGE') {
+    calibrationImageTransfer = null;
+    $('#calibration-progress').value = 0;
+    $('#capture-calibration').disabled = !chars.image;
+    setCalibrationStatus('晶片已收到「拍照並回傳」指令；BLE 指令往返正常，目前未實際拍照。');
+  } else if (message === 'TEST,MEASURE') {
+    showStatus('晶片已收到「立即量測並保存」指令；BLE 指令往返正常，目前未實際拍照或新增紀錄。');
+  } else if (message === 'ERR,SETUP_REQUIRED') {
+    showStatus('裝置尚未完成首次設定，不會執行量測或進入睡眠。', true);
+  } else if (message === 'IMG_WAIT') {
     setCalibrationStatus('ESP32-CAM正在拍攝與分析，暗場時會自動使用LED補光。');
   } else if (message.startsWith('IMG_READY,')) {
     setCalibrationStatus(`照片 ${message.split(',')[1]} 已拍攝，準備接收。`);
@@ -1456,10 +1478,13 @@ $('#save-settings').addEventListener('click', () => guarded(async () => {
     `SET_OFFSET,${offset}`,
     `SET_CLIMATE,${climateEnabled ? 1 : 0}`,
     `SET_TIME,${Math.floor(Date.now() / 1000)}`,
+    'COMPLETE_SETUP',
   ]) {
     await sendCommand(command);
     await new Promise((r) => setTimeout(r, 100));
   }
+
+  await readInfo();
 
   const deviceConfig = {
     deviceId: id,
