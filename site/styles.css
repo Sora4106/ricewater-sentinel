@@ -59,6 +59,7 @@ header p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
 .ble-runtime.ready { color: var(--green); }
 .ble-runtime.notice { color: var(--danger); }
 .header-actions { display: flex; gap: 9px; margin-left: auto; }
+.app-view[hidden] { display: none; }
 
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .summary article, .card {
@@ -82,30 +83,6 @@ input, select {
 .setting-note { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
 .setting-note strong { color: var(--ink); }
 #phone-location { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.ble-test-status { margin: 12px 0; color: var(--muted); font-size: .9rem; }
-.ble-test-status.connected { color: var(--green); font-weight: 650; }
-.ble-test-status.error { color: var(--danger); }
-.ble-text-compose {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
-  align-items: end;
-  gap: 10px;
-}
-.ble-text-log-label { display: block; margin-top: 14px; }
-.ble-text-log {
-  display: block;
-  width: 100%;
-  min-height: 180px;
-  margin-top: 6px;
-  padding: 12px;
-  resize: vertical;
-  color: #d9f6e9;
-  background: #10251f;
-  border: 1px solid #284d41;
-  border-radius: 10px;
-  font: 14px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
-  white-space: pre-wrap;
-}
 .calibration-status { margin-top: 0; color: var(--muted); font-size: .9rem; }
 .calibration-status.error { color: var(--danger); }
 .calibration-history {
@@ -200,8 +177,6 @@ th:nth-child(2), td:nth-child(2) { text-align: left; }
   .form-grid { grid-template-columns: repeat(2, 1fr); }
   .chart-controls { grid-template-columns: 1fr 1fr; }
   .calibration-history { grid-template-columns: 1fr; }
-  .ble-text-compose { grid-template-columns: 1fr; }
-  .ble-text-compose button { width: 100%; }
   .calibration-history button { width: 100%; }
   .chart-controls button { width: 100%; min-width: 0; }
   .card-heading { align-items: flex-start; flex-direction: column; gap: 0; }

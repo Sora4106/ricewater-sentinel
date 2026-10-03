@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.9.0+7">
+<html lang="zh-Hant" data-release-version="0.9.0+8">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -17,175 +17,148 @@
       <div class="mark" aria-hidden="true">水</div>
       <div>
         <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.9.0+7</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.9.0+8</strong></p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
-      <div class="header-actions">
-        <button id="connect" class="primary">連接 BLE</button>
-        <button id="disconnect" disabled>中斷 BLE</button>
-      </div>
+      <nav class="header-actions view-actions" aria-label="系統介面">
+        <button id="view-connect" class="primary" aria-pressed="true">連接介面</button>
+        <button id="view-history" aria-pressed="false">歷史查詢介面</button>
+      </nav>
     </header>
 
-    <section class="summary">
-      <article><span>裝置</span><strong id="device-id">—</strong></article>
-      <article><span>待下載</span><strong id="device-count">—</strong></article>
-      <article><span>手機已存</span><strong id="local-count">0</strong></article>
-      <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
-      <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-      <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+7</strong></article>
-      <article><span>首次設定</span><strong id="device-setup-status">—</strong></article>
-      <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
-      <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
+    <section id="connect-view" class="app-view">
+      <section class="card" id="ble-device-controls">
+        <div class="card-heading">
+          <h2>裝置連線</h2>
+          <span class="card-version">連接 RiceWL- 裝置後可設定、拍照與下載資料</span>
+        </div>
+        <div class="actions">
+          <button id="connect" class="primary">連接 BLE</button>
+          <button id="disconnect" disabled>中斷 BLE</button>
+        </div>
+      </section>
+
+      <section class="card" id="calibration-photos">
+        <div class="card-heading">
+          <h2>圖片校正</h2>
+          <span class="card-version">照片只保存在此手機</span>
+        </div>
+        <p id="calibration-description" class="setting-note">先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；彩色線條顯示晶片實際算出的尺規與水面位置。</p>
+        <div class="actions">
+          <button id="capture-calibration" class="primary" disabled>拍照測試並回傳</button>
+        </div>
+        <progress id="calibration-progress" max="1" value="0"></progress>
+        <p id="calibration-status" class="calibration-status" role="status">尚未連接支援校正照片的ESP32-CAM。</p>
+        <div class="calibration-history">
+          <label>先前照片
+            <select id="calibration-photo-select" disabled></select>
+          </label>
+          <button id="delete-calibration-photo" class="danger" disabled>刪除選取照片</button>
+        </div>
+        <figure class="calibration-viewer">
+          <canvas id="calibration-image" width="320" height="240" hidden></canvas>
+          <p id="calibration-empty">手機中尚無校正照片。</p>
+          <figcaption id="calibration-metadata">照片只保存在此手機瀏覽器，不會上傳Supabase。</figcaption>
+        </figure>
+      </section>
+
+      <section class="summary">
+        <article><span>裝置</span><strong id="device-id">—</strong></article>
+        <article><span>待下載</span><strong id="device-count">—</strong></article>
+        <article><span>手機已存</span><strong id="local-count">0</strong></article>
+        <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
+        <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
+        <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+8</strong></article>
+        <article><span>首次設定</span><strong id="device-setup-status">—</strong></article>
+        <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
+        <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
+      </section>
+
+      <section class="card">
+        <h2>設定</h2>
+        <div class="form-grid">
+          <label>裝置 ID<input id="setting-id" maxlength="8" placeholder="RICE0001"></label>
+          <label>讀取週期（小時）<input id="setting-interval" type="number" min="1" max="24" value="1"></label>
+          <label>水深修正（mm）<input id="setting-offset" type="number" min="-500" max="500" value="0"></label>
+        </div>
+        <label class="toggle"><input id="setting-climate" type="checkbox"> 啟用 DHT22 溫溼度</label>
+        <p class="setting-note">首次安裝：將監控器固定完成並連接 BLE，設定裝置 ID，再取得手機 GPS 定位並寫入設定。</p>
+        <p class="setting-note">連線測試階段的韌體預設睡眠為 1 分鐘；首次設定完成前不會自動拍照或睡眠。</p>
+        <p class="setting-note">手機 GPS：<strong id="phone-location">尚未取得；定位只由手機上傳，ESP32 不含 GPS。</strong></p>
+        <p class="setting-note">尺規裁切範圍：<strong id="roi-state">尚未學習</strong></p>
+        <div class="actions">
+          <button id="get-location">取得手機 GPS 定位</button>
+          <button id="save-settings" class="primary">寫入設定並登錄位置</button>
+          <button id="sync-time">以手機 UTC 校時</button>
+          <button id="clear-roi" class="danger">重新學習尺規位置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-heading">
+          <h2>量測與資料</h2>
+          <span class="card-version">系統版本 <strong data-app-version>0.9.0+8</strong></span>
+        </div>
+        <div class="actions">
+          <button id="measure">立即量測</button>
+          <button id="download" class="primary">下載到手機</button>
+          <button id="refresh">重新讀取狀態</button>
+          <button id="sleep">結束並睡眠</button>
+        </div>
+        <div class="actions secondary-actions">
+          <button id="test-cloud-connection">測試雲端連線</button>
+          <button id="test-cloud">測試雲端上傳</button>
+          <button id="sync-cloud">重試雲端同步</button>
+          <button id="export">匯出 CSV</button>
+          <button id="clear-local" class="danger">清除手機資料</button>
+        </div>
+        <progress id="progress" max="1" value="0"></progress>
+        <p id="status" role="status">請按設定按鈕喚醒監控器，再連接 BLE。</p>
+        <p id="cloud-detail" class="cloud-detail" role="status" hidden></p>
+      </section>
+
+      <section class="card table-card">
+        <h2>手機最近資料</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>流水號</th><th>時間</th><th>水深</th><th>頂端距離</th><th>溫度</th><th>濕度</th><th>品質</th><th>狀態</th></tr></thead>
+            <tbody id="records"><tr><td colspan="8">尚無資料</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section class="card" id="ble-text-test">
-      <div class="card-heading">
-        <h2>BLE UTF-8 文字測試</h2>
-        <span class="card-version">獨立測試韌體：RiceWL-BLE-Test</span>
-      </div>
-      <p class="setting-note">此區只連接獨立文字測試韌體，不使用水位量測服務。App 與晶片都以 UTF-8 及換行分隔訊息。</p>
-      <div class="actions">
-        <button id="ble-test-connect" class="primary">連接測試晶片</button>
-        <button id="ble-test-disconnect" disabled>中斷測試連線</button>
-        <button id="ble-test-clear">清除訊息</button>
-      </div>
-      <p id="ble-test-status" class="ble-test-status" role="status">尚未連接 RiceWL-BLE-Test。</p>
-      <div class="ble-text-compose">
-        <label>傳送到晶片
-          <input id="ble-test-message" type="text" autocomplete="off" placeholder="例如：水位測試 UTF-8 中文" maxlength="240">
-        </label>
-        <button id="ble-test-send" class="primary" disabled>傳送文字</button>
-      </div>
-      <label class="ble-text-log-label">收發紀錄
-        <textarea id="ble-test-log" class="ble-text-log" rows="8" readonly aria-label="BLE UTF-8 收發紀錄"></textarea>
-      </label>
-    </section>
-
-    <section class="card" id="cloud-charts">
-      <div class="card-heading">
-        <h2>雲端歷史圖表</h2>
-        <span class="card-version">僅讀取 Supabase，不使用 BLE 或手機下載資料</span>
-      </div>
-      <div class="chart-controls">
-        <label>裝置 ID<input id="chart-device-id" maxlength="8" placeholder="RICE0001"></label>
-        <label>顯示範圍
-          <select id="chart-range">
-            <option value="day">日（0～23 時）</option>
-            <option value="month">月（1～28／31 日）</option>
-            <option value="year">年（1～12 月）</option>
-          </select>
-        </label>
-        <label>選擇日期<input id="chart-date" type="date"></label>
-        <button id="load-cloud-charts" class="primary">讀取雲端圖表</button>
-      </div>
-      <p id="chart-period-description" class="setting-note">日視圖會依台灣時間顯示 0～23 時的平均值。</p>
-      <p id="chart-status" class="chart-status" role="status">輸入裝置 ID 後即可讀取，不需要連接 BLE。</p>
-
-      <div class="chart-grid">
-        <article class="chart-panel">
-          <h3>水位高度／水深（cm）</h3>
-          <div class="chart-scroll"><canvas id="chart-water" height="300"></canvas></div>
-          <p id="chart-water-readout" class="chart-readout">尚未讀取</p>
-        </article>
-        <article class="chart-panel">
-          <h3>電池電量（%）</h3>
-          <div class="chart-scroll"><canvas id="chart-battery" height="300"></canvas></div>
-          <p id="chart-battery-readout" class="chart-readout">資料庫已預留欄位；舊資料可能沒有電池數值。</p>
-        </article>
-        <article class="chart-panel">
-          <h3>溫度（°C）</h3>
-          <div class="chart-scroll"><canvas id="chart-temperature" height="300"></canvas></div>
-          <p id="chart-temperature-readout" class="chart-readout">尚未讀取</p>
-        </article>
-        <article class="chart-panel">
-          <h3>相對濕度（%）</h3>
-          <div class="chart-scroll"><canvas id="chart-humidity" height="300"></canvas></div>
-          <p id="chart-humidity-readout" class="chart-readout">尚未讀取</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="card" id="calibration-photos">
-      <div class="card-heading">
-        <h2>圖片校正</h2>
-        <span class="card-version">照片只保存在此手機</span>
-      </div>
-      <p id="calibration-description" class="setting-note">先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；暗場或辨識不清時會自動使用LED補光。</p>
-      <div class="actions">
-        <button id="capture-calibration" class="primary" disabled>拍照測試並回傳</button>
-      </div>
-      <progress id="calibration-progress" max="1" value="0"></progress>
-      <p id="calibration-status" class="calibration-status" role="status">尚未連接支援校正照片的ESP32-CAM。</p>
-      <div class="calibration-history">
-        <label>先前照片
-          <select id="calibration-photo-select" disabled></select>
-        </label>
-        <button id="delete-calibration-photo" class="danger" disabled>刪除選取照片</button>
-      </div>
-      <figure class="calibration-viewer">
-        <canvas id="calibration-image" width="320" height="240" hidden></canvas>
-        <p id="calibration-empty">手機中尚無校正照片。</p>
-        <figcaption id="calibration-metadata">照片只保存在此手機瀏覽器，不會上傳Supabase。</figcaption>
-      </figure>
-    </section>
-
-    <section class="card">
-      <h2>設定</h2>
-      <div class="form-grid">
-        <label>裝置 ID<input id="setting-id" maxlength="8" placeholder="RICE0001"></label>
-        <label>讀取週期（小時）<input id="setting-interval" type="number" min="1" max="24" value="1"></label>
-        <label>水深修正（mm）<input id="setting-offset" type="number" min="-500" max="500" value="0"></label>
-      </div>
-      <label class="toggle"><input id="setting-climate" type="checkbox"> 啟用 DHT22 溫溼度</label>
-      <p class="setting-note">首次安裝：將監控器固定完成並連接 BLE，設定裝置 ID，再取得手機 GPS 定位並寫入設定。</p>
-      <p class="setting-note">連線測試階段的韌體預設睡眠為 1 分鐘；首次設定完成前不會自動拍照或睡眠。</p>
-      <p class="setting-note">手機 GPS：<strong id="phone-location">尚未取得；定位只由手機上傳，ESP32 不含 GPS。</strong></p>
-      <p class="setting-note">尺規裁切範圍：<strong id="roi-state">尚未學習</strong></p>
-      <div class="actions">
-        <button id="get-location">取得手機 GPS 定位</button>
-        <button id="save-settings" class="primary">寫入設定並登錄位置</button>
-        <button id="sync-time">以手機 UTC 校時</button>
-        <button id="clear-roi" class="danger">重新學習尺規位置</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-heading">
-        <h2>量測與資料</h2>
-        <span class="card-version">系統版本 <strong data-app-version>0.9.0+7</strong></span>
-      </div>
-      <div class="actions">
-        <button id="measure">立即量測</button>
-        <button id="download" class="primary">下載到手機</button>
-        <button id="refresh">重新讀取狀態</button>
-        <button id="sleep">結束並睡眠</button>
-      </div>
-      <div class="actions secondary-actions">
-        <button id="test-cloud-connection">測試雲端連線</button>
-        <button id="test-cloud">測試雲端上傳</button>
-        <button id="sync-cloud">重試雲端同步</button>
-        <button id="export">匯出 CSV</button>
-        <button id="clear-local" class="danger">清除手機資料</button>
-      </div>
-      <progress id="progress" max="1" value="0"></progress>
-      <p id="status" role="status">請按設定按鈕喚醒監控器，再連接 BLE。</p>
-      <p id="cloud-detail" class="cloud-detail" role="status" hidden></p>
-    </section>
-
-    <section class="card table-card">
-      <h2>手機最近資料</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>流水號</th><th>時間</th><th>水深</th><th>頂端距離</th><th>溫度</th><th>濕度</th><th>品質</th><th>狀態</th></tr></thead>
-          <tbody id="records"><tr><td colspan="8">尚無資料</td></tr></tbody>
-        </table>
-      </div>
+    <section id="history-view" class="app-view" hidden>
+      <section class="card" id="cloud-charts">
+        <div class="card-heading">
+          <h2>雲端歷史圖表</h2>
+          <span class="card-version">僅讀取 Supabase，不使用 BLE 或手機下載資料</span>
+        </div>
+        <div class="chart-controls">
+          <label>裝置 ID<input id="chart-device-id" maxlength="8" placeholder="RICE0001"></label>
+          <label>顯示範圍
+            <select id="chart-range">
+              <option value="day">日（0～23 時）</option>
+              <option value="month">月（1～28／31 日）</option>
+              <option value="year">年（1～12 月）</option>
+            </select>
+          </label>
+          <label>選擇日期<input id="chart-date" type="date"></label>
+          <button id="load-cloud-charts" class="primary">讀取雲端圖表</button>
+        </div>
+        <p id="chart-period-description" class="setting-note">日視圖會依台灣時間顯示 0～23 時的平均值。</p>
+        <p id="chart-status" class="chart-status" role="status">輸入裝置 ID 後即可讀取，不需要連接 BLE。</p>
+        <div class="chart-grid">
+          <article class="chart-panel"><h3>水位高度／水深（cm）</h3><div class="chart-scroll"><canvas id="chart-water" height="300"></canvas></div><p id="chart-water-readout" class="chart-readout">尚未讀取</p></article>
+          <article class="chart-panel"><h3>電池電量（%）</h3><div class="chart-scroll"><canvas id="chart-battery" height="300"></canvas></div><p id="chart-battery-readout" class="chart-readout">資料庫已預留欄位；舊資料可能沒有電池數值。</p></article>
+          <article class="chart-panel"><h3>溫度（°C）</h3><div class="chart-scroll"><canvas id="chart-temperature" height="300"></canvas></div><p id="chart-temperature-readout" class="chart-readout">尚未讀取</p></article>
+          <article class="chart-panel"><h3>相對濕度（%）</h3><div class="chart-scroll"><canvas id="chart-humidity" height="300"></canvas></div><p id="chart-humidity-readout" class="chart-readout">尚未讀取</p></article>
+        </div>
+      </section>
     </section>
   </main>
-  <!-- The build value gives this public browser-safe configuration a distinct
-       URL when it changes, without altering the HTML parser at runtime. -->
-  <script src="supabase-config.js?build=0.9.0-4"></script>
+  <script src="supabase-config.js?build=0.9.0-8"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>

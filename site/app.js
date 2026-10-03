@@ -7,15 +7,6 @@ const UUID = {
   image: '7f510005-4b7e-4ca4-9f6b-6b2752494345',
 };
 
-const BLE_TEXT_TEST = {
-  name: 'RiceWL-BLE-Test',
-  service: '7f520000-4b7e-4ca4-9f6b-6b2752494345',
-  rx: '7f520001-4b7e-4ca4-9f6b-6b2752494345',
-  tx: '7f520002-4b7e-4ca4-9f6b-6b2752494345',
-  chunkBytes: 20,
-  maxMessageBytes: 240,
-};
-
 const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.releaseVersion || '未知版本';
 const MAX_CALIBRATION_IMAGE_BYTES = 1024 * 1024;
 
@@ -34,11 +25,6 @@ let currentLocationDeviceId = null;
 let cloudChartState = null;
 let chartResizeTimer = null;
 let calibrationImageTransfer = null;
-let bleTextDevice = null;
-let bleTextRx = null;
-let bleTextTx = null;
-let bleTextReceiveBuffer = '';
-let bleTextStreamDecoder = new TextDecoder('utf-8', { fatal: true });
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -1063,6 +1049,67 @@ function calibrationFlagText(flags) {
   return parts.join('、');
 }
 
+function drawOverlayLabel(context, text, x, y, color) {
+  context.save();
+  context.font = '600 11px system-ui, -apple-system, "Noto Sans TC", sans-serif';
+  const padding = 4;
+  const width = context.measureText(text).width + padding * 2;
+  const height = 17;
+  context.fillStyle = `${color}dd`;
+  context.fillRect(Math.max(0, x), Math.max(0, y - height), width, height);
+  context.fillStyle = '#ffffff';
+  context.textBaseline = 'middle';
+  context.fillText(text, Math.max(0, x) + padding, Math.max(0, y - height / 2));
+  context.restore();
+}
+
+function drawCalibrationOverlay(context, photo) {
+  const overlay = photo.overlay;
+  if (!overlay) return false;
+  const flags = Number(photo.flags || 0);
+  const inImage = (x, y) => Number.isFinite(x) && Number.isFinite(y) &&
+    x >= 0 && x < photo.width && y >= 0 && y < photo.height;
+  const lineWidth = Math.max(2, Math.round(Math.min(photo.width, photo.height) / 130));
+  let drawn = false;
+
+  context.save();
+  context.lineWidth = lineWidth;
+  context.lineJoin = 'round';
+  if ((flags & 0x20) && inImage(overlay.gaugeLeft, overlay.gaugeTop) &&
+      inImage(overlay.gaugeRight - 1, overlay.gaugeBottom - 1) &&
+      overlay.gaugeRight > overlay.gaugeLeft && overlay.gaugeBottom > overlay.gaugeTop) {
+    context.strokeStyle = '#20c878';
+    context.strokeRect(overlay.gaugeLeft, overlay.gaugeTop,
+      overlay.gaugeRight - overlay.gaugeLeft, overlay.gaugeBottom - overlay.gaugeTop);
+    drawOverlayLabel(context, 'ESP32 尺規外框', overlay.gaugeLeft, overlay.gaugeTop, '#168b52');
+    drawn = true;
+  }
+
+  if ((flags & 0x01) && inImage(overlay.markerX, overlay.markerY)) {
+    context.strokeStyle = '#ffbf1f';
+    context.fillStyle = '#ffbf1f66';
+    context.beginPath();
+    context.arc(overlay.markerX, overlay.markerY, Math.max(6, lineWidth * 2.5), 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    drawOverlayLabel(context, 'ESP32 定位點', overlay.markerX + 8, overlay.markerY - 4, '#b77a00');
+    drawn = true;
+  }
+
+  if ((flags & 0x02) && Number.isFinite(overlay.waterlineY) &&
+      overlay.waterlineY >= 0 && overlay.waterlineY < photo.height) {
+    context.strokeStyle = '#2189ff';
+    context.beginPath();
+    context.moveTo(0, overlay.waterlineY);
+    context.lineTo(photo.width, overlay.waterlineY);
+    context.stroke();
+    drawOverlayLabel(context, 'ESP32 水面線', 4, overlay.waterlineY - 4, '#1268c5');
+    drawn = true;
+  }
+  context.restore();
+  return drawn;
+}
+
 function drawCalibrationPhoto(photo) {
   const canvas = $('#calibration-image');
   const empty = $('#calibration-empty');
@@ -1093,10 +1140,12 @@ function drawCalibrationPhoto(photo) {
     image.data[target + 3] = 255;
   }
   context.putImageData(image, 0, 0);
+  const overlayDrawn = drawCalibrationOverlay(context, photo);
   canvas.hidden = false;
   empty.hidden = true;
   metadata.textContent = `${photo.deviceId}｜${new Date(photo.capturedAt).toLocaleString()}｜` +
-    `${photo.width}×${photo.height}｜品質 ${photo.quality}｜${calibrationFlagText(photo.flags)}`;
+    `${photo.width}×${photo.height}｜品質 ${photo.quality}｜${calibrationFlagText(photo.flags)}` +
+    (overlayDrawn ? '｜彩色線條為 ESP32 的辨識結果' : '｜尚無可繪製的 ESP32 辨識座標');
 }
 
 async function renderCalibrationPhotos(preferredId = '') {
@@ -1155,6 +1204,7 @@ async function finishCalibrationImage(totalChunks, endCrc32) {
     height: transfer.height,
     flags: transfer.flags,
     quality: transfer.quality,
+    overlay: transfer.overlay || null,
     crc32: transfer.crc32,
     pixels: transfer.pixels.buffer.slice(0),
   };
@@ -1170,7 +1220,8 @@ function onImage(event) {
   try {
     const value = event.target.value;
     const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-    if (bytes.length < 6 || bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[3] !== 1) {
+    if (bytes.length < 6 || bytes[0] !== 0x52 || bytes[1] !== 0x49 ||
+        ![1, 2].includes(bytes[3])) {
       throw new Error('收到不支援的影像封包');
     }
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -1194,6 +1245,7 @@ function onImage(event) {
         crc32: view.getUint32(14, true),
         flags: bytes[18],
         quality: bytes[19],
+        protocolVersion: bytes[3],
         chunks: new Map(),
         receivedBytes: 0,
       };
@@ -1226,6 +1278,22 @@ function onImage(event) {
         `接收照片 ${Math.round(transfer.receivedBytes / 1024)} / ` +
         `${Math.round(transfer.totalBytes / 1024)} KB。`
       );
+      return;
+    }
+    if (packetType === 3) {
+      if (bytes.length !== 20 || transfer.protocolVersion < 2) {
+        throw new Error('影像辨識座標封包不正確');
+      }
+      transfer.overlay = {
+        markerX: view.getUint16(6, true),
+        markerY: view.getUint16(8, true),
+        waterlineY: view.getUint16(10, true),
+        gaugeLeft: view.getUint16(12, true),
+        gaugeTop: view.getUint16(14, true),
+        gaugeRight: view.getUint16(16, true),
+        gaugeBottom: view.getUint16(18, true),
+      };
+      setCalibrationStatus('已收到 ESP32 辨識座標，持續接收灰階照片。');
       return;
     }
     if (packetType === 2) {
@@ -1288,181 +1356,6 @@ async function readInfo() {
     : '尚未學習；下次量測會掃描完整畫面';
   await loadDeviceLocation(info.id);
   return info;
-}
-
-function setBleTextStatus(message, state = '') {
-  const target = $('#ble-test-status');
-  target.textContent = message;
-  target.className = `ble-test-status${state ? ` ${state}` : ''}`;
-}
-
-function appendBleTextLog(direction, message) {
-  const log = $('#ble-test-log');
-  const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-  log.value += `[${timestamp}] ${direction}：${message}\n`;
-  log.scrollTop = log.scrollHeight;
-}
-
-function resetBleTextReceiveState() {
-  bleTextReceiveBuffer = '';
-  bleTextStreamDecoder = new TextDecoder('utf-8', { fatal: true });
-}
-
-function updateBleTextDisconnectedUi(message = '尚未連接 RiceWL-BLE-Test。', bad = false) {
-  bleTextRx = null;
-  bleTextTx = null;
-  resetBleTextReceiveState();
-  $('#ble-test-connect').textContent = '連接測試晶片';
-  $('#ble-test-connect').disabled = false;
-  $('#ble-test-disconnect').disabled = true;
-  $('#ble-test-send').disabled = true;
-  setBleTextStatus(message, bad ? 'error' : '');
-}
-
-function onBleTextDisconnected() {
-  const name = bleTextDevice?.name || BLE_TEXT_TEST.name;
-  bleTextDevice = null;
-  updateBleTextDisconnectedUi(`已與 ${name} 斷線。`, true);
-  appendBleTextLog('系統', `${name} 已斷線`);
-}
-
-function onBleTextNotification(event) {
-  try {
-    const value = event.target.value;
-    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-    bleTextReceiveBuffer += bleTextStreamDecoder.decode(bytes, { stream: true });
-    if (bleTextReceiveBuffer.length > 2048) {
-      throw new Error('接收緩衝超過限制，已重設');
-    }
-    let newlineIndex = bleTextReceiveBuffer.indexOf('\n');
-    while (newlineIndex >= 0) {
-      const message = bleTextReceiveBuffer.slice(0, newlineIndex).replace(/\r$/, '');
-      bleTextReceiveBuffer = bleTextReceiveBuffer.slice(newlineIndex + 1);
-      if (message) appendBleTextLog('晶片 → App', message);
-      newlineIndex = bleTextReceiveBuffer.indexOf('\n');
-    }
-  } catch (error) {
-    resetBleTextReceiveState();
-    setBleTextStatus(`UTF-8 接收錯誤：${error.message}`, 'error');
-  }
-}
-
-async function connectBleTextTest() {
-  if (!hasWebBluetooth()) throw new Error(bluetoothUnavailableMessage());
-  if (bleTextDevice?.gatt?.connected && bleTextRx && bleTextTx) {
-    setBleTextStatus(`已連接 ${bleTextDevice.name}。`, 'connected');
-    return;
-  }
-
-  setBleTextStatus('正在選擇 BLE UTF-8 測試晶片…');
-  const selectedDevice = await navigator.bluetooth.requestDevice({
-    filters: [{ namePrefix: BLE_TEXT_TEST.name, services: [BLE_TEXT_TEST.service] }],
-    optionalServices: [BLE_TEXT_TEST.service],
-  });
-  bleTextDevice = selectedDevice;
-  bleTextDevice.addEventListener('gattserverdisconnected', onBleTextDisconnected, { once: true });
-
-  try {
-    setBleTextStatus(`正在連接 ${bleTextDevice.name}…`);
-    const server = await bleTextDevice.gatt.connect();
-    const service = await server.getPrimaryService(BLE_TEXT_TEST.service);
-    // Beacio has shown better compatibility when all characteristics are
-    // discovered first, rather than looking them up one UUID at a time.
-    const availableCharacteristics = await service.getCharacteristics();
-    const byUuid = new Map(availableCharacteristics.map((characteristic) =>
-      [characteristic.uuid.toLowerCase(), characteristic]));
-    bleTextRx = byUuid.get(BLE_TEXT_TEST.rx) || null;
-    bleTextTx = byUuid.get(BLE_TEXT_TEST.tx) || null;
-    if (!bleTextRx || !bleTextTx) {
-      const found = availableCharacteristics.map((characteristic) => characteristic.uuid)
-        .join(', ') || '無';
-      throw new Error(`找不到文字收發 Characteristic；晶片回報：${found}`);
-    }
-    bleTextTx.addEventListener('characteristicvaluechanged', onBleTextNotification);
-    await bleTextTx.startNotifications();
-    resetBleTextReceiveState();
-
-    // The initial Read is informative only.  Some iOS BLE bridges do not
-    // support it on a Notify characteristic, so it must never end a good link.
-    try {
-      const initialValue = await bleTextTx.readValue();
-      if (initialValue.byteLength) {
-        const bytes = new Uint8Array(
-          initialValue.buffer, initialValue.byteOffset, initialValue.byteLength);
-        const initialText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        appendBleTextLog('晶片狀態', initialText);
-      }
-    } catch (readError) {
-      appendBleTextLog('系統', `略過初始讀取：${readError.message}`);
-    }
-
-    $('#ble-test-connect').textContent = 'BLE 已連接';
-    $('#ble-test-connect').disabled = true;
-    $('#ble-test-disconnect').disabled = false;
-    $('#ble-test-send').disabled = false;
-    setBleTextStatus(`已連接 ${bleTextDevice.name}，可以互傳 UTF-8 文字。`, 'connected');
-    appendBleTextLog('系統', `${bleTextDevice.name} 連線成功`);
-  } catch (error) {
-    if (bleTextDevice?.gatt?.connected) bleTextDevice.gatt.disconnect();
-    updateBleTextDisconnectedUi(`連線失敗：${error.message}`, true);
-    throw error;
-  }
-}
-
-function disconnectBleTextTest() {
-  if (bleTextDevice?.gatt?.connected) {
-    bleTextDevice.gatt.disconnect();
-  } else {
-    bleTextDevice = null;
-    updateBleTextDisconnectedUi();
-  }
-}
-
-async function writeBleTextChunks(message) {
-  if (!bleTextDevice?.gatt?.connected || !bleTextRx) {
-    throw new Error('尚未連接 RiceWL-BLE-Test');
-  }
-  const messageBytes = encoder.encode(message);
-  if (!messageBytes.length) throw new Error('請先輸入要傳送的文字');
-  if (messageBytes.length > BLE_TEXT_TEST.maxMessageBytes) {
-    throw new Error(`訊息為 ${messageBytes.length} bytes，最多只能傳送 ${BLE_TEXT_TEST.maxMessageBytes} bytes`);
-  }
-
-  const framed = encoder.encode(`${message}\n`);
-  for (let offset = 0; offset < framed.length; offset += BLE_TEXT_TEST.chunkBytes) {
-    const chunk = framed.slice(offset, offset + BLE_TEXT_TEST.chunkBytes);
-    if (typeof bleTextRx.writeValueWithResponse === 'function') {
-      await bleTextRx.writeValueWithResponse(chunk);
-    } else {
-      await bleTextRx.writeValue(chunk);
-    }
-    if (offset + BLE_TEXT_TEST.chunkBytes < framed.length) {
-      await new Promise((resolve) => setTimeout(resolve, 35));
-    }
-  }
-}
-
-async function sendBleTextFromUi() {
-  const input = $('#ble-test-message');
-  const message = input.value;
-  if (!message.trim()) throw new Error('請先輸入要傳送的文字');
-  $('#ble-test-send').disabled = true;
-  try {
-    await writeBleTextChunks(message);
-    appendBleTextLog('App → 晶片', message);
-    input.value = '';
-    setBleTextStatus('文字已送出，等待晶片 ECHO 回覆。', 'connected');
-  } finally {
-    $('#ble-test-send').disabled = !bleTextDevice?.gatt?.connected;
-  }
-}
-
-async function guardedBleText(action) {
-  try {
-    await action();
-  } catch (error) {
-    setBleTextStatus(error.message, 'error');
-  }
 }
 
 async function sendCommand(command) {
@@ -1682,23 +1575,23 @@ async function guarded(action) {
   try { await action(); } catch (error) { showStatus(error.message, true); }
 }
 
+function selectAppView(view) {
+  const showHistory = view === 'history';
+  $('#connect-view').hidden = showHistory;
+  $('#history-view').hidden = !showHistory;
+  $('#view-connect').classList.toggle('primary', !showHistory);
+  $('#view-history').classList.toggle('primary', showHistory);
+  $('#view-connect').setAttribute('aria-pressed', String(!showHistory));
+  $('#view-history').setAttribute('aria-pressed', String(showHistory));
+  if (showHistory && cloudChartState) {
+    requestAnimationFrame(renderCloudCharts);
+  }
+}
+
 $('#connect').addEventListener('click', () => guarded(connect));
 $('#disconnect').addEventListener('click', disconnect);
-$('#ble-test-connect').addEventListener('click', () => guardedBleText(connectBleTextTest));
-$('#ble-test-disconnect').addEventListener('click', disconnectBleTextTest);
-$('#ble-test-send').addEventListener('click', () => guardedBleText(sendBleTextFromUi));
-$('#ble-test-clear').addEventListener('click', () => {
-  $('#ble-test-log').value = '';
-  setBleTextStatus(bleTextDevice?.gatt?.connected
-    ? `已連接 ${bleTextDevice.name}，可以互傳 UTF-8 文字。`
-    : `尚未連接 ${BLE_TEXT_TEST.name}。`,
-  bleTextDevice?.gatt?.connected ? 'connected' : '');
-});
-$('#ble-test-message').addEventListener('keydown', (event) => {
-  if (event.key !== 'Enter' || event.isComposing) return;
-  event.preventDefault();
-  guardedBleText(sendBleTextFromUi);
-});
+$('#view-connect').addEventListener('click', () => selectAppView('connect'));
+$('#view-history').addEventListener('click', () => selectAppView('history'));
 $('#capture-calibration').addEventListener('click', () => guarded(captureCalibrationImage));
 $('#calibration-photo-select').addEventListener('change', (event) =>
   guarded(() => renderCalibrationPhotos(event.target.value)));
