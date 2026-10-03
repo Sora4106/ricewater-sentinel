@@ -4,9 +4,11 @@ const UUID = {
   info: '7f510002-4b7e-4ca4-9f6b-6b2752494345',
   data: '7f510003-4b7e-4ca4-9f6b-6b2752494345',
   event: '7f510004-4b7e-4ca4-9f6b-6b2752494345',
+  image: '7f510005-4b7e-4ca4-9f6b-6b2752494345',
 };
 
 const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.releaseVersion || '未知版本';
+const MAX_CALIBRATION_IMAGE_BYTES = 1024 * 1024;
 
 const $ = (selector) => document.querySelector(selector);
 const decoder = new TextDecoder();
@@ -22,6 +24,7 @@ let currentLocation = null;
 let currentLocationDeviceId = null;
 let cloudChartState = null;
 let chartResizeTimer = null;
+let calibrationImageTransfer = null;
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -203,7 +206,7 @@ function createCloudTestRecord() {
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open('rice-water-monitor', 3);
+    const request = indexedDB.open('rice-water-monitor', 4);
     request.onupgradeneeded = () => {
       const db = request.result;
       const store = db.objectStoreNames.contains('records')
@@ -218,6 +221,15 @@ function openDb() {
         : db.createObjectStore('deviceConfigs', { keyPath: 'deviceId' });
       if (!deviceStore.indexNames.contains('cloudStatus')) {
         deviceStore.createIndex('cloudStatus', 'cloudStatus');
+      }
+      const photoStore = db.objectStoreNames.contains('calibrationPhotos')
+        ? request.transaction.objectStore('calibrationPhotos')
+        : db.createObjectStore('calibrationPhotos', { keyPath: 'id' });
+      if (!photoStore.indexNames.contains('device')) {
+        photoStore.createIndex('device', 'deviceId');
+      }
+      if (!photoStore.indexNames.contains('capturedAt')) {
+        photoStore.createIndex('capturedAt', 'capturedAt');
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -268,6 +280,40 @@ async function clearLocalRecords() {
     tx.objectStore('records').clear();
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function saveCalibrationPhoto(photo) {
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('calibrationPhotos', 'readwrite');
+    tx.objectStore('calibrationPhotos').put(photo);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('校正照片儲存失敗'));
+  });
+}
+
+async function getCalibrationPhotos() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('calibrationPhotos', 'readonly');
+    const request = tx.objectStore('calibrationPhotos').getAll();
+    request.onsuccess = () => resolve(
+      request.result.sort((a, b) => (b.capturedAt || 0) - (a.capturedAt || 0))
+    );
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function deleteCalibrationPhoto(id) {
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('calibrationPhotos', 'readwrite');
+    tx.objectStore('calibrationPhotos').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('校正照片刪除失敗'));
   });
 }
 
@@ -973,6 +1019,233 @@ async function renderRecords() {
   $('#records').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8">尚無資料</td></tr>';
 }
 
+function imageCrc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = (crc ^ byte) >>> 0;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 1)
+        ? ((crc >>> 1) ^ 0xedb88320) >>> 0
+        : (crc >>> 1) >>> 0;
+    }
+  }
+  return (~crc) >>> 0;
+}
+
+function setCalibrationStatus(message, bad = false) {
+  const target = $('#calibration-status');
+  target.textContent = message;
+  target.classList.toggle('error', bad);
+}
+
+function calibrationFlagText(flags) {
+  const parts = [];
+  parts.push(flags & 0x01 ? '已找到定位圖示' : '未找到定位圖示');
+  parts.push(flags & 0x02 ? '已找到水面' : '未找到水面');
+  if (flags & 0x04) parts.push('已使用LED補光');
+  if (flags & 0x08) parts.push('已使用儲存的裁切範圍');
+  if (flags & 0x10) parts.push('裁切失效後改用完整畫面');
+  if (flags & 0x20) parts.push('已找到尺規外框');
+  return parts.join('、');
+}
+
+function drawCalibrationPhoto(photo) {
+  const canvas = $('#calibration-image');
+  const empty = $('#calibration-empty');
+  const metadata = $('#calibration-metadata');
+  if (!photo) {
+    canvas.hidden = true;
+    empty.hidden = false;
+    metadata.textContent = '照片只保存在此手機瀏覽器，不會上傳 Supabase。';
+    return;
+  }
+
+  const pixels = photo.pixels instanceof ArrayBuffer
+    ? new Uint8Array(photo.pixels)
+    : new Uint8Array(photo.pixels.buffer, photo.pixels.byteOffset,
+      photo.pixels.byteLength);
+  if (pixels.length !== photo.width * photo.height) {
+    throw new Error('已保存的校正照片尺寸不正確');
+  }
+  canvas.width = photo.width;
+  canvas.height = photo.height;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(photo.width, photo.height);
+  for (let index = 0, target = 0; index < pixels.length; index += 1, target += 4) {
+    const value = pixels[index];
+    image.data[target] = value;
+    image.data[target + 1] = value;
+    image.data[target + 2] = value;
+    image.data[target + 3] = 255;
+  }
+  context.putImageData(image, 0, 0);
+  canvas.hidden = false;
+  empty.hidden = true;
+  metadata.textContent = `${photo.deviceId}｜${new Date(photo.capturedAt).toLocaleString()}｜` +
+    `${photo.width}×${photo.height}｜品質 ${photo.quality}｜${calibrationFlagText(photo.flags)}`;
+}
+
+async function renderCalibrationPhotos(preferredId = '') {
+  const photos = await getCalibrationPhotos();
+  const select = $('#calibration-photo-select');
+  const previousId = preferredId || select.value;
+  select.replaceChildren();
+  for (const photo of photos) {
+    const option = document.createElement('option');
+    option.value = photo.id;
+    option.textContent = `${new Date(photo.capturedAt).toLocaleString()}｜${photo.deviceId}`;
+    select.append(option);
+  }
+  const selected = photos.find((photo) => photo.id === previousId) || photos[0] || null;
+  if (selected) select.value = selected.id;
+  select.disabled = photos.length === 0;
+  $('#delete-calibration-photo').disabled = photos.length === 0;
+  drawCalibrationPhoto(selected);
+}
+
+async function finishCalibrationImage(totalChunks, endCrc32) {
+  const transfer = calibrationImageTransfer;
+  if (!transfer) throw new Error('沒有進行中的校正照片');
+  if (!totalChunks || transfer.chunks.size !== totalChunks ||
+      transfer.receivedBytes !== transfer.totalBytes) {
+    throw new Error(`照片接收不完整（收到 ${transfer.chunks.size} / ${totalChunks} 段）`);
+  }
+  const pixels = new Uint8Array(transfer.totalBytes);
+  let offset = 0;
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+    const chunk = transfer.chunks.get(chunkIndex);
+    if (!chunk || offset + chunk.length > pixels.length) {
+      throw new Error(`照片缺少第 ${chunkIndex} 段`);
+    }
+    pixels.set(chunk, offset);
+    offset += chunk.length;
+  }
+  if (offset !== pixels.length) throw new Error('照片組合後的大小不正確');
+  transfer.pixels = pixels;
+  const actualCrc32 = imageCrc32(transfer.pixels);
+  if (actualCrc32 !== transfer.crc32 || actualCrc32 !== endCrc32) {
+    throw new Error('照片 CRC32 驗證失敗，請重新拍攝');
+  }
+
+  calibrationImageTransfer = null;
+  const capturedAt = Date.now();
+  const deviceId = info?.id || device?.name || 'UNKNOWN';
+  const photo = {
+    id: `${deviceId}:${capturedAt}:${transfer.id}`,
+    deviceId,
+    firmwareVersion: info?.fw || 'UNKNOWN',
+    appVersion: APP_VERSION,
+    capturedAt,
+    transferId: transfer.id,
+    width: transfer.width,
+    height: transfer.height,
+    flags: transfer.flags,
+    quality: transfer.quality,
+    crc32: transfer.crc32,
+    pixels: transfer.pixels.buffer.slice(0),
+  };
+  await saveCalibrationPhoto(photo);
+  await renderCalibrationPhotos(photo.id);
+  $('#calibration-progress').value = 1;
+  $('#capture-calibration').disabled = !chars.image;
+  setCalibrationStatus(`校正照片已保存於手機：${calibrationFlagText(photo.flags)}。`);
+  readInfo().catch(() => {});
+}
+
+function onImage(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    if (bytes.length < 6 || bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[3] !== 1) {
+      throw new Error('收到不支援的影像封包');
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const packetType = bytes[2];
+    const transferId = view.getUint16(4, true);
+
+    if (packetType === 0) {
+      if (bytes.length !== 20) throw new Error('影像描述封包長度不正確');
+      const width = view.getUint16(6, true);
+      const height = view.getUint16(8, true);
+      const totalBytes = view.getUint32(10, true);
+      if (!width || !height || totalBytes !== width * height ||
+          totalBytes > MAX_CALIBRATION_IMAGE_BYTES) {
+        throw new Error('影像尺寸超出允許範圍');
+      }
+      calibrationImageTransfer = {
+        id: transferId,
+        width,
+        height,
+        totalBytes,
+        crc32: view.getUint32(14, true),
+        flags: bytes[18],
+        quality: bytes[19],
+        chunks: new Map(),
+        receivedBytes: 0,
+      };
+      $('#calibration-progress').value = 0;
+      setCalibrationStatus(`開始接收 ${width}×${height} 校正照片。`);
+      return;
+    }
+
+    const transfer = calibrationImageTransfer;
+    if (!transfer || transfer.id !== transferId) {
+      throw new Error('影像編號不一致');
+    }
+    if (packetType === 1) {
+      if (bytes.length < 10) throw new Error('影像資料封包過短');
+      const chunkIndex = view.getUint16(6, true);
+      const payloadLength = view.getUint16(8, true);
+      if (!payloadLength || payloadLength > transfer.totalBytes ||
+          bytes.length !== 10 + payloadLength) {
+        throw new Error(`影像分段 ${chunkIndex} 長度不正確`);
+      }
+      if (!transfer.chunks.has(chunkIndex)) {
+        transfer.chunks.set(chunkIndex, bytes.slice(10));
+        transfer.receivedBytes += payloadLength;
+        if (transfer.receivedBytes > transfer.totalBytes) {
+          throw new Error('收到的影像資料超過預期大小');
+        }
+      }
+      $('#calibration-progress').value = transfer.receivedBytes / transfer.totalBytes;
+      setCalibrationStatus(
+        `接收照片 ${Math.round(transfer.receivedBytes / 1024)} / ` +
+        `${Math.round(transfer.totalBytes / 1024)} KB。`
+      );
+      return;
+    }
+    if (packetType === 2) {
+      if (bytes.length !== 12) throw new Error('影像結束封包長度不正確');
+      finishCalibrationImage(view.getUint16(6, true), view.getUint32(8, true))
+        .catch((error) => {
+          calibrationImageTransfer = null;
+          $('#capture-calibration').disabled = !chars.image;
+          setCalibrationStatus(error.message, true);
+        });
+      return;
+    }
+    throw new Error(`未知的影像封包類型 ${packetType}`);
+  } catch (error) {
+    calibrationImageTransfer = null;
+    $('#capture-calibration').disabled = !chars.image;
+    setCalibrationStatus(error.message, true);
+  }
+}
+
+async function captureCalibrationImage() {
+  if (!chars.image) throw new Error('目前韌體不支援校正照片，請更新ESP32-CAM韌體');
+  calibrationImageTransfer = null;
+  $('#calibration-progress').value = 0;
+  $('#capture-calibration').disabled = true;
+  setCalibrationStatus('正在請求ESP32-CAM拍攝校正照片…');
+  try {
+    await sendCommand('CAL_IMAGE');
+  } catch (error) {
+    $('#capture-calibration').disabled = false;
+    throw error;
+  }
+}
+
 async function readInfo() {
   const value = await chars.info.readValue();
   info = JSON.parse(decoder.decode(value));
@@ -1006,19 +1279,31 @@ async function connect() {
   device.addEventListener('gattserverdisconnected', () => {
     $('#connection').textContent = '已斷線';
     chars = {};
+    calibrationImageTransfer = null;
+    $('#capture-calibration').disabled = true;
+    setCalibrationStatus('BLE已斷線；手機中先前保存的校正照片仍會保留。', true);
     showStatus('BLE 已斷線；未送出 ACK 的裝置資料仍會保留。', true);
   });
   const server = await device.gatt.connect();
   const service = await server.getPrimaryService(UUID.service);
-  [chars.command, chars.info, chars.data, chars.event] = await Promise.all([
+  [chars.command, chars.info, chars.data, chars.event, chars.image] = await Promise.all([
     service.getCharacteristic(UUID.command),
     service.getCharacteristic(UUID.info),
     service.getCharacteristic(UUID.data),
     service.getCharacteristic(UUID.event),
+    service.getCharacteristic(UUID.image).catch(() => null),
   ]);
   chars.data.addEventListener('characteristicvaluechanged', onData);
   chars.event.addEventListener('characteristicvaluechanged', onEvent);
-  await Promise.all([chars.data.startNotifications(), chars.event.startNotifications()]);
+  const notificationStarts = [
+    chars.data.startNotifications(),
+    chars.event.startNotifications(),
+  ];
+  if (chars.image) {
+    chars.image.addEventListener('characteristicvaluechanged', onImage);
+    notificationStarts.push(chars.image.startNotifications());
+  }
+  await Promise.all(notificationStarts);
   await readInfo();
   // With no onboard GPS, every BLE connection refreshes the ESP32 RTC from
   // the phone. Deep sleep keeps this UTC value until power is fully removed.
@@ -1026,6 +1311,10 @@ async function connect() {
   await new Promise((resolve) => setTimeout(resolve, 150));
   await readInfo();
   $('#connection').textContent = `已連接 ${device.name}`;
+  $('#capture-calibration').disabled = !chars.image;
+  setCalibrationStatus(chars.image
+    ? '已連線，可按「圖片校正」取得目前相機畫面。'
+    : '目前韌體沒有校正影像通道，請更新ESP32-CAM韌體。', !chars.image);
   showStatus('連線完成，已使用手機 UTC 校正裝置時間。');
   // Retry phone-backed records whenever a field worker opens the app; this
   // does not need, and never asks, the ESP32-CAM to use Wi-Fi.
@@ -1070,7 +1359,23 @@ async function finishDownload(lastSequence) {
 
 function onEvent(event) {
   const message = decoder.decode(event.target.value);
-  if (message.startsWith('DL,')) {
+  if (message === 'IMG_WAIT') {
+    setCalibrationStatus('ESP32-CAM正在拍攝與分析，暗場時會自動使用LED補光。');
+  } else if (message.startsWith('IMG_READY,')) {
+    setCalibrationStatus(`照片 ${message.split(',')[1]} 已拍攝，準備接收。`);
+  } else if (message.startsWith('IMG_DONE,')) {
+    // The image characteristic carries the verified end packet. Persistence is
+    // completed there; this event only confirms that the camera buffer closed.
+  } else if (message.startsWith('ERR,IMG_')) {
+    calibrationImageTransfer = null;
+    $('#capture-calibration').disabled = !chars.image;
+    setCalibrationStatus(
+      message === 'ERR,IMG_CAMERA'
+        ? '相機初始化或拍照失敗，請檢查鏡頭排線後重試。'
+        : '影像傳輸忙碌中，請等待目前照片完成。',
+      true
+    );
+  } else if (message.startsWith('DL,')) {
     const [, count, last] = message.split(',');
     expectedDownload = Number(count);
     downloadLastSequence = Number(last);
@@ -1095,6 +1400,17 @@ async function guarded(action) {
 }
 
 $('#connect').addEventListener('click', () => guarded(connect));
+$('#capture-calibration').addEventListener('click', () => guarded(captureCalibrationImage));
+$('#calibration-photo-select').addEventListener('change', (event) =>
+  guarded(() => renderCalibrationPhotos(event.target.value)));
+$('#delete-calibration-photo').addEventListener('click', () => guarded(async () => {
+  const selectedId = $('#calibration-photo-select').value;
+  if (!selectedId) return;
+  if (!confirm('刪除這張保存在手機中的校正照片？此操作無法復原。')) return;
+  await deleteCalibrationPhoto(selectedId);
+  await renderCalibrationPhotos();
+  setCalibrationStatus('已刪除選取的校正照片。');
+}));
 $('#load-cloud-charts').addEventListener('click', () => guarded(loadCloudCharts));
 $('#chart-range').addEventListener('change', updateChartPeriodDescription);
 $('#chart-date').addEventListener('change', updateChartPeriodDescription);
@@ -1246,7 +1562,7 @@ window.addEventListener('resize', () => {
   clearTimeout(chartResizeTimer);
   chartResizeTimer = setTimeout(renderCloudCharts, 120);
 });
-renderRecords()
+Promise.all([renderRecords(), renderCalibrationPhotos()])
   .then(() => syncAllPendingCloudData())
   .catch((error) => showStatus(error.message, true));
 initializeCloudCharts().catch((error) => {

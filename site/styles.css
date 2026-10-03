@@ -82,6 +82,40 @@ input, select {
 .setting-note { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
 .setting-note strong { color: var(--ink); }
 #phone-location { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.calibration-status { margin-top: 0; color: var(--muted); font-size: .9rem; }
+.calibration-status.error { color: var(--danger); }
+.calibration-history {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 14px;
+}
+.calibration-viewer {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #eef1ec;
+}
+.calibration-viewer canvas {
+  display: block;
+  width: min(100%, 640px);
+  height: auto;
+  border-radius: 8px;
+  background: #111;
+}
+.calibration-viewer p { padding: 42px 10px; color: var(--muted); }
+.calibration-viewer figcaption {
+  width: 100%;
+  color: var(--muted);
+  font-size: .8rem;
+  overflow-wrap: anywhere;
+}
 .chart-controls {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(170px, .8fr) minmax(170px, .8fr) auto;
@@ -140,6 +174,8 @@ th:nth-child(2), td:nth-child(2) { text-align: left; }
   .summary { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: repeat(2, 1fr); }
   .chart-controls { grid-template-columns: 1fr 1fr; }
+  .calibration-history { grid-template-columns: 1fr; }
+  .calibration-history button { width: 100%; }
   .chart-controls button { width: 100%; min-width: 0; }
   .card-heading { align-items: flex-start; flex-direction: column; gap: 0; }
   .card { padding: 16px; }

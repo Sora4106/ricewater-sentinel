@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.8.0+1">
+<html lang="zh-Hant" data-release-version="0.9.0+1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -17,7 +17,7 @@
       <div class="mark" aria-hidden="true">水</div>
       <div>
         <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.8.0+1</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.9.0+1</strong></p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
@@ -30,7 +30,7 @@
       <article><span>手機已存</span><strong id="local-count">0</strong></article>
       <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
       <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-      <article><span>App 版本</span><strong id="app-version" data-app-version>0.8.0+1</strong></article>
+      <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+1</strong></article>
       <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
       <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
     </section>
@@ -79,6 +79,30 @@
       </div>
     </section>
 
+    <section class="card" id="calibration-photos">
+      <div class="card-heading">
+        <h2>圖片校正</h2>
+        <span class="card-version">照片只保存在此手機</span>
+      </div>
+      <p class="setting-note">先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；暗場或辨識不清時會自動使用LED補光。</p>
+      <div class="actions">
+        <button id="capture-calibration" class="primary" disabled>圖片校正（取得照片）</button>
+      </div>
+      <progress id="calibration-progress" max="1" value="0"></progress>
+      <p id="calibration-status" class="calibration-status" role="status">尚未連接支援校正照片的ESP32-CAM。</p>
+      <div class="calibration-history">
+        <label>先前照片
+          <select id="calibration-photo-select" disabled></select>
+        </label>
+        <button id="delete-calibration-photo" class="danger" disabled>刪除選取照片</button>
+      </div>
+      <figure class="calibration-viewer">
+        <canvas id="calibration-image" width="320" height="240" hidden></canvas>
+        <p id="calibration-empty">手機中尚無校正照片。</p>
+        <figcaption id="calibration-metadata">照片只保存在此手機瀏覽器，不會上傳Supabase。</figcaption>
+      </figure>
+    </section>
+
     <section class="card">
       <h2>設定</h2>
       <div class="form-grid">
@@ -101,7 +125,7 @@
     <section class="card">
       <div class="card-heading">
         <h2>量測與資料</h2>
-        <span class="card-version">系統版本 <strong data-app-version>0.8.0+1</strong></span>
+        <span class="card-version">系統版本 <strong data-app-version>0.9.0+1</strong></span>
       </div>
       <div class="actions">
         <button id="measure">立即量測</button>
@@ -133,7 +157,7 @@
   </main>
   <!-- The build value gives this public browser-safe configuration a distinct
        URL when it changes, without altering the HTML parser at runtime. -->
-  <script src="supabase-config.js?build=0.8.0-1"></script>
+  <script src="supabase-config.js?build=0.9.0-1"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>
