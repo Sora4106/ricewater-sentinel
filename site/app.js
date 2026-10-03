@@ -1364,20 +1364,34 @@ async function connectBleTextTest() {
     setBleTextStatus(`正在連接 ${bleTextDevice.name}…`);
     const server = await bleTextDevice.gatt.connect();
     const service = await server.getPrimaryService(BLE_TEXT_TEST.service);
-    [bleTextRx, bleTextTx] = await Promise.all([
-      service.getCharacteristic(BLE_TEXT_TEST.rx),
-      service.getCharacteristic(BLE_TEXT_TEST.tx),
-    ]);
+    // Beacio has shown better compatibility when all characteristics are
+    // discovered first, rather than looking them up one UUID at a time.
+    const availableCharacteristics = await service.getCharacteristics();
+    const byUuid = new Map(availableCharacteristics.map((characteristic) =>
+      [characteristic.uuid.toLowerCase(), characteristic]));
+    bleTextRx = byUuid.get(BLE_TEXT_TEST.rx) || null;
+    bleTextTx = byUuid.get(BLE_TEXT_TEST.tx) || null;
+    if (!bleTextRx || !bleTextTx) {
+      const found = availableCharacteristics.map((characteristic) => characteristic.uuid)
+        .join(', ') || '無';
+      throw new Error(`找不到文字收發 Characteristic；晶片回報：${found}`);
+    }
     bleTextTx.addEventListener('characteristicvaluechanged', onBleTextNotification);
     await bleTextTx.startNotifications();
     resetBleTextReceiveState();
 
-    const initialValue = await bleTextTx.readValue();
-    if (initialValue.byteLength) {
-      const bytes = new Uint8Array(
-        initialValue.buffer, initialValue.byteOffset, initialValue.byteLength);
-      const initialText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-      appendBleTextLog('晶片狀態', initialText);
+    // The initial Read is informative only.  Some iOS BLE bridges do not
+    // support it on a Notify characteristic, so it must never end a good link.
+    try {
+      const initialValue = await bleTextTx.readValue();
+      if (initialValue.byteLength) {
+        const bytes = new Uint8Array(
+          initialValue.buffer, initialValue.byteOffset, initialValue.byteLength);
+        const initialText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        appendBleTextLog('晶片狀態', initialText);
+      }
+    } catch (readError) {
+      appendBleTextLog('系統', `略過初始讀取：${readError.message}`);
     }
 
     $('#ble-test-connect').textContent = 'BLE 已連接';
