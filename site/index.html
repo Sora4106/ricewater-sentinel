@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.9.0+2">
+<html lang="zh-Hant" data-release-version="0.9.0+3">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -17,7 +17,7 @@
       <div class="mark" aria-hidden="true">水</div>
       <div>
         <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.9.0+2</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.9.0+3</strong></p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
@@ -30,10 +30,33 @@
       <article><span>手機已存</span><strong id="local-count">0</strong></article>
       <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
       <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-      <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+2</strong></article>
+      <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+3</strong></article>
       <article><span>首次設定</span><strong id="device-setup-status">—</strong></article>
       <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
       <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
+    </section>
+
+    <section class="card" id="ble-text-test">
+      <div class="card-heading">
+        <h2>BLE UTF-8 文字測試</h2>
+        <span class="card-version">獨立測試韌體：RiceWL-BLE-Test</span>
+      </div>
+      <p class="setting-note">此區只連接獨立文字測試韌體，不使用水位量測服務。App 與晶片都以 UTF-8 及換行分隔訊息。</p>
+      <div class="actions">
+        <button id="ble-test-connect" class="primary">連接測試晶片</button>
+        <button id="ble-test-disconnect" disabled>中斷測試連線</button>
+        <button id="ble-test-clear">清除訊息</button>
+      </div>
+      <p id="ble-test-status" class="ble-test-status" role="status">尚未連接 RiceWL-BLE-Test。</p>
+      <div class="ble-text-compose">
+        <label>傳送到晶片
+          <input id="ble-test-message" type="text" autocomplete="off" placeholder="例如：水位測試 UTF-8 中文" maxlength="240">
+        </label>
+        <button id="ble-test-send" class="primary" disabled>傳送文字</button>
+      </div>
+      <label class="ble-text-log-label">收發紀錄
+        <textarea id="ble-test-log" class="ble-text-log" rows="8" readonly aria-label="BLE UTF-8 收發紀錄"></textarea>
+      </label>
     </section>
 
     <section class="card" id="cloud-charts">
@@ -127,7 +150,7 @@
     <section class="card">
       <div class="card-heading">
         <h2>量測與資料</h2>
-        <span class="card-version">系統版本 <strong data-app-version>0.9.0+2</strong></span>
+        <span class="card-version">系統版本 <strong data-app-version>0.9.0+3</strong></span>
       </div>
       <div class="actions">
         <button id="measure">立即量測</button>
@@ -159,7 +182,7 @@
   </main>
   <!-- The build value gives this public browser-safe configuration a distinct
        URL when it changes, without altering the HTML parser at runtime. -->
-  <script src="supabase-config.js?build=0.9.0-2"></script>
+  <script src="supabase-config.js?build=0.9.0-3"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>

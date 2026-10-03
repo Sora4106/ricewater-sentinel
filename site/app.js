@@ -7,6 +7,15 @@ const UUID = {
   image: '7f510005-4b7e-4ca4-9f6b-6b2752494345',
 };
 
+const BLE_TEXT_TEST = {
+  name: 'RiceWL-BLE-Test',
+  service: '7f520000-4b7e-4ca4-9f6b-6b2752494345',
+  rx: '7f520001-4b7e-4ca4-9f6b-6b2752494345',
+  tx: '7f520002-4b7e-4ca4-9f6b-6b2752494345',
+  chunkBytes: 20,
+  maxMessageBytes: 240,
+};
+
 const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.releaseVersion || '未知版本';
 const MAX_CALIBRATION_IMAGE_BYTES = 1024 * 1024;
 
@@ -25,6 +34,11 @@ let currentLocationDeviceId = null;
 let cloudChartState = null;
 let chartResizeTimer = null;
 let calibrationImageTransfer = null;
+let bleTextDevice = null;
+let bleTextRx = null;
+let bleTextTx = null;
+let bleTextReceiveBuffer = '';
+let bleTextStreamDecoder = new TextDecoder('utf-8', { fatal: true });
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -1274,6 +1288,167 @@ async function readInfo() {
   return info;
 }
 
+function setBleTextStatus(message, state = '') {
+  const target = $('#ble-test-status');
+  target.textContent = message;
+  target.className = `ble-test-status${state ? ` ${state}` : ''}`;
+}
+
+function appendBleTextLog(direction, message) {
+  const log = $('#ble-test-log');
+  const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+  log.value += `[${timestamp}] ${direction}：${message}\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function resetBleTextReceiveState() {
+  bleTextReceiveBuffer = '';
+  bleTextStreamDecoder = new TextDecoder('utf-8', { fatal: true });
+}
+
+function updateBleTextDisconnectedUi(message = '尚未連接 RiceWL-BLE-Test。', bad = false) {
+  bleTextRx = null;
+  bleTextTx = null;
+  resetBleTextReceiveState();
+  $('#ble-test-connect').textContent = '連接測試晶片';
+  $('#ble-test-connect').disabled = false;
+  $('#ble-test-disconnect').disabled = true;
+  $('#ble-test-send').disabled = true;
+  setBleTextStatus(message, bad ? 'error' : '');
+}
+
+function onBleTextDisconnected() {
+  const name = bleTextDevice?.name || BLE_TEXT_TEST.name;
+  bleTextDevice = null;
+  updateBleTextDisconnectedUi(`已與 ${name} 斷線。`, true);
+  appendBleTextLog('系統', `${name} 已斷線`);
+}
+
+function onBleTextNotification(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    bleTextReceiveBuffer += bleTextStreamDecoder.decode(bytes, { stream: true });
+    if (bleTextReceiveBuffer.length > 2048) {
+      throw new Error('接收緩衝超過限制，已重設');
+    }
+    let newlineIndex = bleTextReceiveBuffer.indexOf('\n');
+    while (newlineIndex >= 0) {
+      const message = bleTextReceiveBuffer.slice(0, newlineIndex).replace(/\r$/, '');
+      bleTextReceiveBuffer = bleTextReceiveBuffer.slice(newlineIndex + 1);
+      if (message) appendBleTextLog('晶片 → App', message);
+      newlineIndex = bleTextReceiveBuffer.indexOf('\n');
+    }
+  } catch (error) {
+    resetBleTextReceiveState();
+    setBleTextStatus(`UTF-8 接收錯誤：${error.message}`, 'error');
+  }
+}
+
+async function connectBleTextTest() {
+  if (!hasWebBluetooth()) throw new Error(bluetoothUnavailableMessage());
+  if (bleTextDevice?.gatt?.connected && bleTextRx && bleTextTx) {
+    setBleTextStatus(`已連接 ${bleTextDevice.name}。`, 'connected');
+    return;
+  }
+
+  setBleTextStatus('正在選擇 BLE UTF-8 測試晶片…');
+  const selectedDevice = await navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix: BLE_TEXT_TEST.name, services: [BLE_TEXT_TEST.service] }],
+    optionalServices: [BLE_TEXT_TEST.service],
+  });
+  bleTextDevice = selectedDevice;
+  bleTextDevice.addEventListener('gattserverdisconnected', onBleTextDisconnected, { once: true });
+
+  try {
+    setBleTextStatus(`正在連接 ${bleTextDevice.name}…`);
+    const server = await bleTextDevice.gatt.connect();
+    const service = await server.getPrimaryService(BLE_TEXT_TEST.service);
+    [bleTextRx, bleTextTx] = await Promise.all([
+      service.getCharacteristic(BLE_TEXT_TEST.rx),
+      service.getCharacteristic(BLE_TEXT_TEST.tx),
+    ]);
+    bleTextTx.addEventListener('characteristicvaluechanged', onBleTextNotification);
+    await bleTextTx.startNotifications();
+    resetBleTextReceiveState();
+
+    const initialValue = await bleTextTx.readValue();
+    if (initialValue.byteLength) {
+      const bytes = new Uint8Array(
+        initialValue.buffer, initialValue.byteOffset, initialValue.byteLength);
+      const initialText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      appendBleTextLog('晶片狀態', initialText);
+    }
+
+    $('#ble-test-connect').textContent = 'BLE 已連接';
+    $('#ble-test-connect').disabled = true;
+    $('#ble-test-disconnect').disabled = false;
+    $('#ble-test-send').disabled = false;
+    setBleTextStatus(`已連接 ${bleTextDevice.name}，可以互傳 UTF-8 文字。`, 'connected');
+    appendBleTextLog('系統', `${bleTextDevice.name} 連線成功`);
+  } catch (error) {
+    if (bleTextDevice?.gatt?.connected) bleTextDevice.gatt.disconnect();
+    updateBleTextDisconnectedUi(`連線失敗：${error.message}`, true);
+    throw error;
+  }
+}
+
+function disconnectBleTextTest() {
+  if (bleTextDevice?.gatt?.connected) {
+    bleTextDevice.gatt.disconnect();
+  } else {
+    bleTextDevice = null;
+    updateBleTextDisconnectedUi();
+  }
+}
+
+async function writeBleTextChunks(message) {
+  if (!bleTextDevice?.gatt?.connected || !bleTextRx) {
+    throw new Error('尚未連接 RiceWL-BLE-Test');
+  }
+  const messageBytes = encoder.encode(message);
+  if (!messageBytes.length) throw new Error('請先輸入要傳送的文字');
+  if (messageBytes.length > BLE_TEXT_TEST.maxMessageBytes) {
+    throw new Error(`訊息為 ${messageBytes.length} bytes，最多只能傳送 ${BLE_TEXT_TEST.maxMessageBytes} bytes`);
+  }
+
+  const framed = encoder.encode(`${message}\n`);
+  for (let offset = 0; offset < framed.length; offset += BLE_TEXT_TEST.chunkBytes) {
+    const chunk = framed.slice(offset, offset + BLE_TEXT_TEST.chunkBytes);
+    if (typeof bleTextRx.writeValueWithResponse === 'function') {
+      await bleTextRx.writeValueWithResponse(chunk);
+    } else {
+      await bleTextRx.writeValue(chunk);
+    }
+    if (offset + BLE_TEXT_TEST.chunkBytes < framed.length) {
+      await new Promise((resolve) => setTimeout(resolve, 35));
+    }
+  }
+}
+
+async function sendBleTextFromUi() {
+  const input = $('#ble-test-message');
+  const message = input.value;
+  if (!message.trim()) throw new Error('請先輸入要傳送的文字');
+  $('#ble-test-send').disabled = true;
+  try {
+    await writeBleTextChunks(message);
+    appendBleTextLog('App → 晶片', message);
+    input.value = '';
+    setBleTextStatus('文字已送出，等待晶片 ECHO 回覆。', 'connected');
+  } finally {
+    $('#ble-test-send').disabled = !bleTextDevice?.gatt?.connected;
+  }
+}
+
+async function guardedBleText(action) {
+  try {
+    await action();
+  } catch (error) {
+    setBleTextStatus(error.message, 'error');
+  }
+}
+
 async function sendCommand(command) {
   if (!chars.command) throw new Error('尚未連線');
   await chars.command.writeValue(encoder.encode(command));
@@ -1282,7 +1457,7 @@ async function sendCommand(command) {
 async function connect() {
   if (!hasWebBluetooth()) throw new Error(bluetoothUnavailableMessage());
   device = await navigator.bluetooth.requestDevice({
-    filters: [{ namePrefix: 'RiceWL-' }],
+    filters: [{ namePrefix: 'RiceWL-', services: [UUID.service] }],
     optionalServices: [UUID.service],
   });
   device.addEventListener('gattserverdisconnected', () => {
@@ -1422,6 +1597,21 @@ async function guarded(action) {
 }
 
 $('#connect').addEventListener('click', () => guarded(connect));
+$('#ble-test-connect').addEventListener('click', () => guardedBleText(connectBleTextTest));
+$('#ble-test-disconnect').addEventListener('click', disconnectBleTextTest);
+$('#ble-test-send').addEventListener('click', () => guardedBleText(sendBleTextFromUi));
+$('#ble-test-clear').addEventListener('click', () => {
+  $('#ble-test-log').value = '';
+  setBleTextStatus(bleTextDevice?.gatt?.connected
+    ? `已連接 ${bleTextDevice.name}，可以互傳 UTF-8 文字。`
+    : `尚未連接 ${BLE_TEXT_TEST.name}。`,
+  bleTextDevice?.gatt?.connected ? 'connected' : '');
+});
+$('#ble-test-message').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  guardedBleText(sendBleTextFromUi);
+});
 $('#capture-calibration').addEventListener('click', () => guarded(captureCalibrationImage));
 $('#calibration-photo-select').addEventListener('change', (event) =>
   guarded(() => renderCalibrationPhotos(event.target.value)));
