@@ -1,1 +1,1 @@
-self.RICE_APP_VERSION = '0.9.0+6';
+self.RICE_APP_VERSION = '0.9.0+7';

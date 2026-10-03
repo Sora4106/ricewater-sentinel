@@ -1489,22 +1489,34 @@ function onOfficialBleDisconnected() {
 }
 
 function disconnect() {
-  if (!device?.gatt?.connected) {
+  const disconnectingDevice = device;
+  if (!disconnectingDevice?.gatt?.connected) {
     device = null;
     updateOfficialBleDisconnectedUi('目前沒有正式 BLE 連線。');
     return;
   }
-  const disconnectingDevice = device;
   $('#disconnect').disabled = true;
   showStatus('正在中斷 BLE 連線…');
-  disconnectingDevice.gatt.disconnect();
-  // Native Web Bluetooth normally emits gattserverdisconnected immediately.
-  // Keep a small fallback for iOS BLE bridges that only update gatt.connected.
-  setTimeout(() => {
-    if (device === disconnectingDevice && !disconnectingDevice.gatt.connected) {
-      onOfficialBleDisconnected();
-    }
-  }, 250);
+  // Beacio does not always emit gattserverdisconnected after an App-initiated
+  // disconnect.  Call the physical GATT disconnect, then restore the UI now.
+  try {
+    disconnectingDevice.removeEventListener?.(
+      'gattserverdisconnected', onOfficialBleDisconnected);
+  } catch (_) {
+    // Continue; an older bridge may not implement removeEventListener.
+  }
+  try {
+    disconnectingDevice.gatt.disconnect();
+  } catch (error) {
+    device = null;
+    updateOfficialBleDisconnectedUi(
+      `App 已清除連線狀態，但 BLE 橋接回報中斷失敗：${error.message}`,
+      true
+    );
+    return;
+  }
+  device = null;
+  updateOfficialBleDisconnectedUi(`已由 App 中斷 ${disconnectingDevice.name || 'RiceWL 裝置'} 的 BLE 連線。`);
 }
 
 async function connect() {
@@ -1522,14 +1534,23 @@ async function connect() {
   });
     device.addEventListener('gattserverdisconnected', onOfficialBleDisconnected, { once: true });
     const server = await device.gatt.connect();
-  const service = await server.getPrimaryService(UUID.service);
-    [chars.command, chars.info, chars.data, chars.event, chars.image] = await Promise.all([
-    service.getCharacteristic(UUID.command),
-    service.getCharacteristic(UUID.info),
-    service.getCharacteristic(UUID.data),
-    service.getCharacteristic(UUID.event),
-    service.getCharacteristic(UUID.image).catch(() => null),
-  ]);
+    const service = await server.getPrimaryService(UUID.service);
+    // Beacio/iOS is more reliable when all Characteristics are enumerated
+    // first, rather than looking up each UUID one by one.
+    const availableCharacteristics = await service.getCharacteristics();
+    const byUuid = new Map(availableCharacteristics.map((characteristic) =>
+      [characteristic.uuid.toLowerCase(), characteristic]));
+    const requiredCharacteristic = (uuid, label) => {
+      const characteristic = byUuid.get(uuid.toLowerCase());
+      if (characteristic) return characteristic;
+      const found = availableCharacteristics.map((item) => item.uuid).join(', ') || '無';
+      throw new Error(`找不到 ${label} Characteristic；晶片回報：${found}`);
+    };
+    chars.command = requiredCharacteristic(UUID.command, '指令');
+    chars.info = requiredCharacteristic(UUID.info, '資訊');
+    chars.data = requiredCharacteristic(UUID.data, '資料');
+    chars.event = requiredCharacteristic(UUID.event, '事件');
+    chars.image = byUuid.get(UUID.image.toLowerCase()) || null;
     chars.data.addEventListener('characteristicvaluechanged', onData);
   chars.event.addEventListener('characteristicvaluechanged', onEvent);
     const notificationStarts = [
