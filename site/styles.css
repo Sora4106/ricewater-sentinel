@@ -58,7 +58,7 @@ header p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
 .ble-runtime { max-width: 46rem; font-size: .78rem; }
 .ble-runtime.ready { color: var(--green); }
 .ble-runtime.notice { color: var(--danger); }
-header button { margin-left: auto; }
+.header-actions { display: flex; gap: 9px; margin-left: auto; }
 
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .summary article, .card {
@@ -194,7 +194,8 @@ th:nth-child(2), td:nth-child(2) { text-align: left; }
 @media (max-width: 760px) {
   main { width: min(100% - 18px, 620px); margin-top: 16px; }
   header { align-items: flex-start; flex-wrap: wrap; }
-  header button { width: 100%; margin-left: 0; }
+  .header-actions { width: 100%; }
+  .header-actions button { flex: 1; }
   .summary { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: repeat(2, 1fr); }
   .chart-controls { grid-template-columns: 1fr 1fr; }

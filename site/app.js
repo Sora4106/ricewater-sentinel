@@ -1470,60 +1470,108 @@ async function sendCommand(command) {
   await chars.command.writeValue(encoder.encode(command));
 }
 
+function updateOfficialBleDisconnectedUi(message, isError = false) {
+  chars = {};
+  calibrationImageTransfer = null;
+  $('#connection').textContent = '已斷線';
+  $('#connect').textContent = '連接 BLE';
+  $('#connect').disabled = false;
+  $('#disconnect').disabled = true;
+  $('#capture-calibration').disabled = true;
+  setCalibrationStatus('BLE已斷線；手機中先前保存的校正照片仍會保留。', isError);
+  showStatus(message, isError);
+}
+
+function onOfficialBleDisconnected() {
+  const name = device?.name || 'RiceWL 裝置';
+  device = null;
+  updateOfficialBleDisconnectedUi(`已與 ${name} 中斷 BLE 連線。`);
+}
+
+function disconnect() {
+  if (!device?.gatt?.connected) {
+    device = null;
+    updateOfficialBleDisconnectedUi('目前沒有正式 BLE 連線。');
+    return;
+  }
+  const disconnectingDevice = device;
+  $('#disconnect').disabled = true;
+  showStatus('正在中斷 BLE 連線…');
+  disconnectingDevice.gatt.disconnect();
+  // Native Web Bluetooth normally emits gattserverdisconnected immediately.
+  // Keep a small fallback for iOS BLE bridges that only update gatt.connected.
+  setTimeout(() => {
+    if (device === disconnectingDevice && !disconnectingDevice.gatt.connected) {
+      onOfficialBleDisconnected();
+    }
+  }, 250);
+}
+
 async function connect() {
+  if (device?.gatt?.connected) {
+    showStatus(`已連接 ${device.name}。`);
+    return;
+  }
   if (!hasWebBluetooth()) throw new Error(bluetoothUnavailableMessage());
-  device = await navigator.bluetooth.requestDevice({
+  $('#connect').disabled = true;
+  $('#connect').textContent = '正在連線…';
+  try {
+    device = await navigator.bluetooth.requestDevice({
     filters: [{ namePrefix: 'RiceWL-', services: [UUID.service] }],
     optionalServices: [UUID.service],
   });
-  device.addEventListener('gattserverdisconnected', () => {
-    $('#connection').textContent = '已斷線';
-    chars = {};
-    calibrationImageTransfer = null;
-    $('#capture-calibration').disabled = true;
-    setCalibrationStatus('BLE已斷線；手機中先前保存的校正照片仍會保留。', true);
-    showStatus('BLE 已斷線；未送出 ACK 的裝置資料仍會保留。', true);
-  });
-  const server = await device.gatt.connect();
+    device.addEventListener('gattserverdisconnected', onOfficialBleDisconnected, { once: true });
+    const server = await device.gatt.connect();
   const service = await server.getPrimaryService(UUID.service);
-  [chars.command, chars.info, chars.data, chars.event, chars.image] = await Promise.all([
+    [chars.command, chars.info, chars.data, chars.event, chars.image] = await Promise.all([
     service.getCharacteristic(UUID.command),
     service.getCharacteristic(UUID.info),
     service.getCharacteristic(UUID.data),
     service.getCharacteristic(UUID.event),
     service.getCharacteristic(UUID.image).catch(() => null),
   ]);
-  chars.data.addEventListener('characteristicvaluechanged', onData);
+    chars.data.addEventListener('characteristicvaluechanged', onData);
   chars.event.addEventListener('characteristicvaluechanged', onEvent);
-  const notificationStarts = [
+    const notificationStarts = [
     chars.data.startNotifications(),
     chars.event.startNotifications(),
   ];
-  if (chars.image) {
+    if (chars.image) {
     chars.image.addEventListener('characteristicvaluechanged', onImage);
     notificationStarts.push(chars.image.startNotifications());
   }
-  await Promise.all(notificationStarts);
-  await readInfo();
+    await Promise.all(notificationStarts);
+    await readInfo();
   // With no onboard GPS, every BLE connection refreshes the ESP32 RTC from
   // the phone. Deep sleep keeps this UTC value until power is fully removed.
-  await sendCommand(`SET_TIME,${Math.floor(Date.now() / 1000)}`);
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  await readInfo();
-  $('#connection').textContent = `已連接 ${device.name}`;
-  $('#capture-calibration').disabled = !chars.image;
-  const photoCaptureEnabled = Boolean(info?.photo_test) || !info?.test_mode;
-  setCalibrationStatus(chars.image
+    await sendCommand(`SET_TIME,${Math.floor(Date.now() / 1000)}`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await readInfo();
+    $('#connection').textContent = `已連接 ${device.name}`;
+    $('#connect').textContent = 'BLE 已連接';
+    $('#connect').disabled = true;
+    $('#disconnect').disabled = false;
+    $('#capture-calibration').disabled = !chars.image;
+    const photoCaptureEnabled = Boolean(info?.photo_test) || !info?.test_mode;
+    setCalibrationStatus(chars.image
     ? (photoCaptureEnabled
       ? '已連線；可按「拍照測試並回傳」取得目前相機畫面。'
       : '已連線；目前只測試拍照指令往返，不會實際拍照。')
     : '目前韌體沒有校正影像通道，請更新ESP32-CAM韌體。', !chars.image);
-  showStatus(info?.provisioned
+    showStatus(info?.provisioned
     ? '連線完成，已使用手機 UTC 校正裝置時間。'
     : '連線完成；裝置尚未完成首次設定，因此不會自動拍照或睡眠。');
   // Retry phone-backed records whenever a field worker opens the app; this
   // does not need, and never asks, the ESP32-CAM to use Wi-Fi.
-  syncAllPendingCloudData().catch(() => setCloudSummary('待重試', true));
+    syncAllPendingCloudData().catch(() => setCloudSummary('待重試', true));
+  } catch (error) {
+    if (device?.gatt?.connected) device.gatt.disconnect();
+    else {
+      device = null;
+      updateOfficialBleDisconnectedUi('BLE 連線未建立，請重新選擇裝置。');
+    }
+    throw error;
+  }
 }
 
 function onData(event) {
@@ -1614,6 +1662,7 @@ async function guarded(action) {
 }
 
 $('#connect').addEventListener('click', () => guarded(connect));
+$('#disconnect').addEventListener('click', disconnect);
 $('#ble-test-connect').addEventListener('click', () => guardedBleText(connectBleTextTest));
 $('#ble-test-disconnect').addEventListener('click', disconnectBleTextTest);
 $('#ble-test-send').addEventListener('click', () => guardedBleText(sendBleTextFromUi));
