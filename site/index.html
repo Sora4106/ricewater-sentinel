@@ -32,10 +32,61 @@
 
   <title>水稻田監控系統</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { width: 100%; height: 100%; margin: 0; }
+    #bootstrap-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: grid;
+      place-items: center;
+      color: #103e34;
+      background: linear-gradient(135deg, #fff9e7, #e3efdf);
+      font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+    }
+    .bootstrap-card { text-align: center; padding: 28px; }
+    .bootstrap-logo {
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      box-shadow: 0 10px 28px rgba(13, 96, 72, .18);
+    }
+    .bootstrap-card h1 { margin: 16px 0 6px; font-size: 25px; }
+    .bootstrap-status { margin: 0; color: #4f685f; }
+    .bootstrap-bar {
+      width: min(260px, 70vw);
+      height: 4px;
+      margin: 20px auto 0;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(13, 96, 72, .14);
+    }
+    .bootstrap-bar::after {
+      content: "";
+      display: block;
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background: #0d6048;
+      animation: bootstrap-progress 1.25s ease-in-out infinite alternate;
+    }
+    @keyframes bootstrap-progress {
+      from { transform: translateX(-20%); }
+      to { transform: translateX(160%); }
+    }
+  </style>
   <!-- Beacio 在 iOS Safari 中提供 Web Bluetooth 相容介面。 -->
   <script defer src="https://beacio.com/beacio.js"></script>
 </head>
 <body>
+  <div id="bootstrap-loading" role="status" aria-live="polite">
+    <div class="bootstrap-card">
+      <img class="bootstrap-logo" src="icons/Icon-192.png" alt="水稻田監控系統 Logo">
+      <h1>水稻田監控系統</h1>
+      <p class="bootstrap-status">正在下載系統，首次開啟需要一些時間…</p>
+      <div class="bootstrap-bar" aria-hidden="true"></div>
+    </div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -56,11 +107,16 @@
         reloading = true;
         location.reload();
       });
-      addEventListener('load', () => {
+      let registrationStarted = false;
+      const registerPwaUpdate = () => {
+        if (registrationStarted) return;
+        registrationStarted = true;
         navigator.serviceWorker.register('service-worker.js')
           .then((registration) => registration.update())
           .catch((error) => console.warn('PWA 更新服務啟動失敗', error));
-      });
+      };
+      addEventListener('ricewater-ready', registerPwaUpdate, { once: true });
+      setTimeout(registerPwaUpdate, 60000);
     }
   </script>
 </body>

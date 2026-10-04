@@ -29610,7 +29610,7 @@ if(j==null)j=new A.bJ(Date.now(),0,!1)
 i=a.i(0,"firmwareVersion")
 i=A.k(i==null?"UNKNOWN":i)
 h=a.i(0,"appVersion")
-h=A.k(h==null?"0.11.0+1":h)
+h=A.k(h==null?"0.11.0+2":h)
 g=a.i(0,"cloudStatus")
 g=A.k(g==null?"pending":g)
 f=A.bN(a.i(0,"cloudError"))
@@ -29640,7 +29640,7 @@ j=a.i(0,"installedAt")
 j=A.vS(A.k(j==null?"":j))
 if(j==null)j=new A.bJ(Date.now(),0,!1)
 i=a.i(0,"appVersion")
-i=A.k(i==null?"0.11.0+1":i)
+i=A.k(i==null?"0.11.0+2":i)
 h=a.i(0,"cloudStatus")
 return new A.jx(g,s,r,q,p,o,n,m,l,k,j,i,A.k(h==null?"pending":h),A.bN(a.i(0,"cloudError")),A.bN(a.i(0,"accountUserId")))},
 aZL(a){var s,r,q,p,o,n,m,l,k,j,i,h=a.i(0,"id")
@@ -31693,7 +31693,7 @@ $S:2}
 A.aGX.prototype={
 $1(a){var s=A.dl().b
 s=s==null?null:s.canvasKitBaseUrl
-return(s==null?"canvaskit/":s)+a},
+return(s==null?"https://www.gstatic.com/flutter-canvaskit/5d531788691ec3404cac0cee66ead4007b177363/":s)+a},
 $S:48}
 A.QH.prototype={
 gq(a){var s=this.a
@@ -100921,7 +100921,7 @@ p=p?null:l.c
 if(p==null)p=m.f
 d=g.w
 c=m==null?null:m.z
-b=new A.jx(a1,k,i,f,e,p,a2,a3,a0,d,c==null?new A.bJ(Date.now(),0,!1):c,"0.11.0+1","pending",null,o)
+b=new A.jx(a1,k,i,f,e,p,a2,a3,a0,d,c==null?new A.bJ(Date.now(),0,!1):c,"0.11.0+2","pending",null,o)
 s=8
 return A.j(a.za(o,b),$async$lY)
 case 8:s=9
@@ -101124,7 +101124,7 @@ o=Date.now()
 l=l.ch
 l=l==null?null:l.w
 if(l==null)l="FLUTTER-TEST"
-m=A.ajh(p,"0.11.0+1",null,"pending",null,0,n,new A.bJ(o,0,!1),B.e.cv(o,1000),l,0,65535,100,o,-32768,-32768,-32768)
+m=A.ajh(p,"0.11.0+2",null,"pending",null,0,n,new A.bJ(o,0,!1),B.e.cv(o,1000),l,0,65535,100,o,-32768,-32768,-32768)
 o=t.yE
 s=2
 return A.j(q.b.uU(p,A.b([m],o)),$async$yK)
@@ -101427,7 +101427,7 @@ A.azQ.prototype={
 $1(a){if(a==="logout")this.a.c.v8()},
 $S:68}
 A.azP.prototype={
-$1(a){var s=null,r=t.N,q=A.aRb(new A.IK("\u7cfb\u7d71\u7248\u672c","0.11.0+1",s),!1,r),p=this.a.c.a.a.gcQ().e.a
+$1(a){var s=null,r=t.N,q=A.aRb(new A.IK("\u7cfb\u7d71\u7248\u672c","0.11.0+2",s),!1,r),p=this.a.c.a.a.gcQ().e.a
 p=p==null?s:p.r
 p=p==null?s:p.z
 return A.b([q,A.aRb(new A.IK("\u767b\u5165\u5e33\u865f",p==null?"\u2014":p,s),!1,r),B.Se,B.Sf],t.Do)},
@@ -102157,7 +102157,7 @@ if(q.ch)o.push(B.Rr)
 s=q.CW
 if(s.length!==0)o.push(new A.bp(B.p1,A.b2(s,p,p,p,A.hb(p,p,q.cx?A.R(a).ax.fy:A.R(a).ax.b,p,p,p,p,p,p,p,p,p,p,p,p,p,p,!0,p,p,p,p,p,p,p,p),p,p),p))
 o.push(B.j_)
-o.push(A.b2("\u7cfb\u7d71\u7248\u672c 0.11.0+1",p,p,p,A.R(a).ok.Q,B.eB,p))
+o.push(A.b2("\u7cfb\u7d71\u7248\u672c 0.11.0+2",p,p,p,A.R(a).ok.Q,B.eB,p))
 return A.anY(A.i2(B.a7,A.FG(new A.eK(B.Dy,A.fU(new A.bp(B.p2,A.ct(o,B.aP,B.x,B.J),p)),p),p,B.as),B.D,p,B.DG,p,p,p,B.kx,p,p,p))},
 Ie(a,b,c,d){var s=null
 return new A.bp(B.Iz,A.Gp(b,A.aKp(s,s,s,s,s,s,s,s,!0,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,a,!0,!0,!1,s,s,s,s,s,s,s,s,s,s,s,s,s,s),c,d),s)},
@@ -102538,7 +102538,7 @@ h=o.getInt16(12,!0)
 g=o.getUint16(14,!0)
 f=q[16]
 e=q[17]
-r.push(A.ajh(b,"0.11.0+1",b,"pending",b,n,p,new A.bJ(Date.now(),0,!1),k,m,e,g,f,l,j,h,i))
+r.push(A.ajh(b,"0.11.0+2",b,"pending",b,n,p,new A.bJ(Date.now(),0,!1),k,m,e,g,f,l,j,h,i))
 p=c.at
 c.fr=p>0?r.length/p:0
 c.CW="\u63a5\u6536 "+r.length+" / "+p+" \u7b46"}catch(d){s=A.V(d)

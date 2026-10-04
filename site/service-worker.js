@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '0.11.0+1';
+const VERSION = '0.11.0+2';
 const CACHE = `ricewater-sentinel-${VERSION}`;
 const CORE = [
   './',
@@ -8,6 +8,8 @@ const CORE = [
   'flutter.js',
   'flutter_bootstrap.js',
   'main.dart.js',
+  'main.dart.mjs',
+  'main.dart.wasm',
   'manifest.json',
   'version.json',
   'favicon.png',
@@ -22,10 +24,6 @@ const CORE = [
   'assets/fonts/MaterialIcons-Regular.otf',
   'assets/packages/cupertino_icons/assets/CupertinoIcons.ttf',
   'assets/assets/rice-cat-logo.png',
-  'canvaskit/canvaskit.js',
-  'canvaskit/canvaskit.wasm',
-  'canvaskit/chromium/canvaskit.js',
-  'canvaskit/chromium/canvaskit.wasm',
 ];
 
 self.addEventListener('install', (event) => {
@@ -51,7 +49,23 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin) {
+    const isFlutterCanvasKit =
+      url.hostname === 'www.gstatic.com' &&
+      url.pathname.includes('/flutter-canvaskit/');
+    if (!isFlutterCanvasKit) return;
+    event.respondWith(
+      caches.open(CACHE).then((cache) =>
+        cache.match(event.request).then((cached) =>
+          cached || fetch(event.request).then((response) => {
+            cache.put(event.request, response.clone());
+            return response;
+          }),
+        ),
+      ),
+    );
+    return;
+  }
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
