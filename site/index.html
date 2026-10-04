@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.10.0+2">
+<html lang="zh-Hant" data-release-version="0.10.0+3">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -53,6 +53,7 @@
         </label>
         <button class="primary auth-submit" type="submit">登入系統</button>
         <button id="show-forgot-password" class="text-button" type="button">忘記密碼？</button>
+        <button id="resend-confirmation" class="text-button" type="button">重寄驗證信</button>
       </form>
 
       <form id="register-form" class="auth-form" hidden>
@@ -109,7 +110,7 @@
       </form>
 
       <p id="auth-status" class="auth-status" role="status"></p>
-      <p class="auth-version">系統版本 <strong data-app-version>0.10.0+2</strong></p>
+      <p class="auth-version">系統版本 <strong data-app-version>0.10.0+3</strong></p>
     </article>
   </section>
 
@@ -118,7 +119,7 @@
       <img class="header-logo" src="rice-cat-logo.png" alt="水稻田監控系統 Logo">
       <div class="header-title">
         <h1>水稻田監控系統</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.10.0+2</strong></p>
+        <p class="release-version">系統版本 <strong data-app-version>0.10.0+3</strong></p>
         <p id="account-summary">正在讀取帳號…</p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
@@ -230,7 +231,7 @@
         <article><span>手機已存</span><strong id="local-count">0</strong></article>
         <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
         <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-        <article><span>App 版本</span><strong id="app-version" data-app-version>0.10.0+2</strong></article>
+        <article><span>App 版本</span><strong id="app-version" data-app-version>0.10.0+3</strong></article>
         <article><span>首次設定</span><strong id="device-setup-status">—</strong></article>
         <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
         <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
@@ -259,7 +260,7 @@
       <section class="card">
         <div class="card-heading">
           <h2>量測與資料</h2>
-          <span class="card-version">系統版本 <strong data-app-version>0.10.0+2</strong></span>
+          <span class="card-version">系統版本 <strong data-app-version>0.10.0+3</strong></span>
         </div>
         <div class="actions">
           <button id="measure">立即量測</button>
@@ -319,7 +320,7 @@
       </section>
     </section>
   </main>
-  <script src="supabase-config.js?build=0.10.0-2"></script>
+  <script src="supabase-config.js?build=0.10.0-3"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>

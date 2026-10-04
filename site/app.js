@@ -34,6 +34,7 @@ let currentFarmDevices = [];
 let authenticatedAppInitialized = false;
 let splashFinished = false;
 let passwordRecoveryMode = false;
+let authCallbackError = '';
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -77,6 +78,7 @@ function getSupabaseConfig() {
   const raw = self.RICE_SUPABASE_CONFIG || {};
   const url = String(raw.url || '').trim().replace(/\/+$/, '');
   const anonKey = String(raw.anonKey || '').trim();
+  const authRedirectUrl = String(raw.authRedirectUrl || '').trim();
   const table = String(raw.table || 'rice_measurements').trim();
   const deviceRpc = String(raw.deviceRpc || 'register_rice_device_for_farm').trim();
   const chartRpc = String(raw.chartRpc || 'get_my_rice_chart').trim();
@@ -86,6 +88,7 @@ function getSupabaseConfig() {
   const renameFarmRpc = String(raw.renameFarmRpc || 'rename_my_rice_farm').trim();
   if (!url || !anonKey) return null;
   if (!/^https:\/\//.test(url) ||
+      (authRedirectUrl && !/^https:\/\//.test(authRedirectUrl)) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(table) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(deviceRpc) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(chartRpc) ||
@@ -94,7 +97,7 @@ function getSupabaseConfig() {
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(devicesRpc) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(renameFarmRpc)) return null;
   return {
-    url, anonKey, table, deviceRpc, chartRpc,
+    url, anonKey, authRedirectUrl, table, deviceRpc, chartRpc,
     profileRpc, farmsRpc, devicesRpc, renameFarmRpc,
   };
 }
@@ -110,7 +113,9 @@ function normalizeFarmCode(value) {
 }
 
 function authRedirectUrl() {
-  return `${location.origin}${location.pathname}`;
+  const configured = getSupabaseConfig()?.authRedirectUrl;
+  if (configured) return configured;
+  return new URL('./', location.href).href.replace(/[?#].*$/, '');
 }
 
 async function responsePayload(response) {
@@ -235,6 +240,18 @@ function showLoggedOutScreen(panel = 'login') {
 
 function sessionFromLocationHash() {
   const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const query = new URLSearchParams(location.search);
+  const errorCode = hash.get('error_code') || query.get('error_code') ||
+    hash.get('error') || query.get('error');
+  const errorDescription = hash.get('error_description') || query.get('error_description');
+  if (errorCode || errorDescription) {
+    const expired = /expired|invalid|otp_expired/i.test(`${errorCode || ''} ${errorDescription || ''}`);
+    authCallbackError = expired
+      ? '電子郵件確認連結已失效或已使用，請輸入註冊信箱後按「重寄驗證信」。'
+      : `電子郵件確認失敗：${errorDescription || errorCode}`;
+    history.replaceState(null, document.title, location.pathname);
+    return false;
+  }
   if (!hash.get('access_token')) return false;
   const saved = saveAuthSession({
     access_token: hash.get('access_token'),
@@ -282,6 +299,7 @@ async function finishSplash() {
     await enterAuthenticatedApp();
   } else {
     showLoggedOutScreen();
+    if (authCallbackError) setAuthStatus(authCallbackError, true);
   }
 }
 
@@ -2093,6 +2111,22 @@ $('#show-register').addEventListener('click', () => showAuthPanel('register'));
 $('#show-forgot-password').addEventListener('click', () => {
   $('#forgot-email').value = $('#login-email').value;
   showAuthPanel('forgot');
+});
+$('#resend-confirmation').addEventListener('click', async () => {
+  const email = $('#login-email').value.trim();
+  if (!email) {
+    setAuthStatus('請先輸入註冊時使用的電子信箱。', true);
+    $('#login-email').focus();
+    return;
+  }
+  setAuthStatus('正在重寄電子郵件驗證信…');
+  try {
+    const path = `resend?redirect_to=${encodeURIComponent(authRedirectUrl())}`;
+    await authApi(path, { body: { type: 'signup', email } });
+    setAuthStatus('驗證信已重寄；請使用最新一封信件中的連結。');
+  } catch (error) {
+    setAuthStatus(`無法重寄驗證信：${error.message}`, true);
+  }
 });
 $('#back-to-login').addEventListener('click', () => showAuthPanel('login'));
 document.querySelectorAll('input[name="register-farm-mode"]').forEach((input) =>

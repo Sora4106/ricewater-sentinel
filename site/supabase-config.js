@@ -6,6 +6,7 @@
 self.RICE_SUPABASE_CONFIG = Object.freeze({
   url: 'https://wffyctbnhawfgnyhxiwe.supabase.co',
   anonKey: 'sb_publishable_dwhVdM5DtETHF-cIFgHgPA_kdsTpI_Y',
+  authRedirectUrl: 'https://sora4106.github.io/ricewater-sentinel/',
   table: 'rice_measurements',
   deviceRpc: 'register_rice_device_for_farm',
   chartRpc: 'get_my_rice_chart',
