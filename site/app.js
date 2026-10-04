@@ -1063,6 +1063,27 @@ function drawOverlayLabel(context, text, x, y, color) {
   context.restore();
 }
 
+function drawCalibrationDirectionMarker(context, photo) {
+  // Flag 0x40 is emitted by firmware 0.8.7 and later only after the ESP32 has
+  // rotated the camera pixels. Do not mark historical landscape photos.
+  if (!(Number(photo.flags || 0) & 0x40)) return false;
+  const padding = Math.max(5, Math.round(Math.min(photo.width, photo.height) / 60));
+  const fontSize = Math.max(12, Math.round(Math.min(photo.width, photo.height) / 19));
+  const label = '↑ 旋轉後畫面頂端';
+  context.save();
+  context.font = `700 ${fontSize}px system-ui, -apple-system, "Noto Sans TC", sans-serif`;
+  const width = Math.min(photo.width - padding * 2,
+    Math.ceil(context.measureText(label).width) + padding * 2);
+  const height = fontSize + padding * 2;
+  context.fillStyle = '#17212bd9';
+  context.fillRect(padding, padding, width, height);
+  context.fillStyle = '#ffffff';
+  context.textBaseline = 'middle';
+  context.fillText(label, padding * 2, padding + height / 2);
+  context.restore();
+  return true;
+}
+
 function drawCalibrationOverlay(context, photo) {
   const overlay = photo.overlay;
   if (!overlay) return false;
@@ -1140,11 +1161,13 @@ function drawCalibrationPhoto(photo) {
     image.data[target + 3] = 255;
   }
   context.putImageData(image, 0, 0);
+  const directionMarkerDrawn = drawCalibrationDirectionMarker(context, photo);
   const overlayDrawn = drawCalibrationOverlay(context, photo);
   canvas.hidden = false;
   empty.hidden = true;
   metadata.textContent = `${photo.deviceId}｜${new Date(photo.capturedAt).toLocaleString()}｜` +
     `${photo.width}×${photo.height}｜品質 ${photo.quality}｜${calibrationFlagText(photo.flags)}` +
+    (directionMarkerDrawn ? '｜↑ 為旋轉後畫面頂端' : '') +
     (overlayDrawn ? '｜彩色線條為 ESP32 的辨識結果' : '｜尚無可繪製的 ESP32 辨識座標');
 }
 
