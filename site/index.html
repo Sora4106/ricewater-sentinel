@@ -1,33 +1,196 @@
 <!doctype html>
-<html lang="zh-Hant" data-release-version="0.9.0+9">
+<html lang="zh-Hant" data-release-version="0.10.0+2">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#155e48">
-  <title>稻田水位監控器</title>
+  <meta name="theme-color" content="#174f3a">
+  <title>水稻田監控系統</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="rice-cat-logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="rice-cat-logo.png">
   <link rel="stylesheet" href="styles.css">
   <!-- Beacio supplies standard Web Bluetooth on iOS Safari when its Safari
        extension is installed and enabled; native Web Bluetooth is unchanged. -->
-  <script src="https://beacio.com/beacio.js"></script>
+  <script defer src="https://beacio.com/beacio.js"></script>
 </head>
 <body>
-  <main>
-    <header>
-      <div class="mark" aria-hidden="true">水</div>
-      <div>
-        <h1>稻田水位監控器</h1>
-        <p class="release-version">系統版本 <strong data-app-version>0.9.0+9</strong></p>
+  <section id="splash-screen" class="splash-screen" role="button" tabindex="0" aria-label="進入水稻田監控系統">
+    <div class="splash-rice" aria-hidden="true"></div>
+    <div class="splash-content">
+      <img class="splash-logo" src="rice-cat-logo.png" alt="貓咪農夫在水田插秧的系統 Logo">
+      <p class="splash-kicker">智慧農業・水位守護</p>
+      <h1>水稻田監控系統</h1>
+      <p class="splash-company">XXX 公司</p>
+      <p class="splash-hint">5 秒後自動進入・觸碰任意位置可略過</p>
+      <span class="splash-timer" aria-hidden="true"></span>
+    </div>
+  </section>
+
+  <section id="auth-screen" class="auth-screen" hidden>
+    <div class="auth-rice" aria-hidden="true"></div>
+    <article class="auth-card">
+      <div class="auth-brand">
+        <img src="rice-cat-logo.png" alt="水稻田監控系統 Logo">
+        <div>
+          <p>XXX 公司</p>
+          <h1>水稻田監控系統</h1>
+        </div>
+      </div>
+
+      <div id="auth-tabs" class="auth-tabs" role="tablist" aria-label="帳號操作">
+        <button id="show-login" class="primary" type="button" role="tab" aria-selected="true">登入</button>
+        <button id="show-register" type="button" role="tab" aria-selected="false">註冊帳號</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <h2>登入農場帳號</h2>
+        <p class="auth-help">登入後可查看所屬農場、監控桿位置及歷史量測資料。</p>
+        <label>電子信箱
+          <input id="login-email" type="email" autocomplete="email" required placeholder="name@example.com">
+        </label>
+        <label>密碼
+          <input id="login-password" type="password" autocomplete="current-password" minlength="6" required>
+        </label>
+        <button class="primary auth-submit" type="submit">登入系統</button>
+        <button id="show-forgot-password" class="text-button" type="button">忘記密碼？</button>
+      </form>
+
+      <form id="register-form" class="auth-form" hidden>
+        <h2>註冊帳號</h2>
+        <p class="auth-help">每位共同管理者使用自己的信箱；可建立新農場或用既有農場編號加入。</p>
+        <div class="auth-form-grid">
+          <label>姓名／稱呼
+            <input id="register-name" maxlength="40" autocomplete="name" required placeholder="例如：王小明">
+          </label>
+          <label>電子信箱
+            <input id="register-email" type="email" autocomplete="email" required placeholder="name@example.com">
+          </label>
+          <label>密碼
+            <input id="register-password" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <label>再次輸入密碼
+            <input id="register-password-confirm" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+        </div>
+        <fieldset class="farm-choice">
+          <legend>農場設定</legend>
+          <label class="choice-card"><input type="radio" name="register-farm-mode" value="new" checked> 建立新農場</label>
+          <label class="choice-card"><input type="radio" name="register-farm-mode" value="join"> 使用農場編號加入共同管理</label>
+        </fieldset>
+        <label id="register-farm-name-field">農場名稱
+          <input id="register-farm-name" maxlength="60" placeholder="例如：希望稻作一號田">
+        </label>
+        <label id="register-farm-code-field" hidden>既有農場編號
+          <input id="register-farm-code" maxlength="11" autocapitalize="characters" placeholder="例如：RF-12AB34CD">
+        </label>
+        <button class="primary auth-submit" type="submit">建立帳號</button>
+      </form>
+
+      <form id="forgot-form" class="auth-form" hidden>
+        <h2>重設密碼</h2>
+        <p class="auth-help">輸入註冊信箱，Supabase 會寄送密碼重設連結。</p>
+        <label>電子信箱
+          <input id="forgot-email" type="email" autocomplete="email" required>
+        </label>
+        <button class="primary auth-submit" type="submit">寄送重設信</button>
+        <button id="back-to-login" class="text-button" type="button">返回登入</button>
+      </form>
+
+      <form id="reset-password-form" class="auth-form" hidden>
+        <h2>設定新密碼</h2>
+        <p class="auth-help">請輸入新的登入密碼。</p>
+        <label>新密碼
+          <input id="reset-password" type="password" autocomplete="new-password" minlength="8" required>
+        </label>
+        <label>再次輸入新密碼
+          <input id="reset-password-confirm" type="password" autocomplete="new-password" minlength="8" required>
+        </label>
+        <button class="primary auth-submit" type="submit">更新密碼</button>
+      </form>
+
+      <p id="auth-status" class="auth-status" role="status"></p>
+      <p class="auth-version">系統版本 <strong data-app-version>0.10.0+2</strong></p>
+    </article>
+  </section>
+
+  <main id="app-shell" hidden>
+    <header class="app-header">
+      <img class="header-logo" src="rice-cat-logo.png" alt="水稻田監控系統 Logo">
+      <div class="header-title">
+        <h1>水稻田監控系統</h1>
+        <p class="release-version">系統版本 <strong data-app-version>0.10.0+2</strong></p>
+        <p id="account-summary">正在讀取帳號…</p>
         <p id="connection">尚未連線</p>
         <p id="ble-runtime" class="ble-runtime" role="status"></p>
       </div>
       <nav class="header-actions view-actions" aria-label="系統介面">
-        <button id="view-connect" class="primary" aria-pressed="true">連接介面</button>
-        <button id="view-history" aria-pressed="false">歷史查詢介面</button>
+        <button id="view-farm" class="primary" aria-pressed="true">農場首頁</button>
+        <button id="view-connect" aria-pressed="false">裝置連線</button>
+        <button id="view-history" aria-pressed="false">歷史查詢</button>
+        <button id="logout" class="gold-button">登出</button>
       </nav>
     </header>
 
-    <section id="connect-view" class="app-view">
+    <section id="farm-view" class="app-view">
+      <section class="farm-hero card">
+        <div>
+          <p class="eyebrow">MY RICE FARM</p>
+          <h2 id="farm-welcome">歡迎回來</h2>
+          <p id="farm-overview" class="setting-note">正在整理您的農場與監控桿資料。</p>
+        </div>
+        <button id="refresh-farms" type="button">重新整理農場</button>
+      </section>
+
+      <section id="farm-onboarding" class="card" hidden>
+        <div class="card-heading">
+          <h2>完成農場設定</h2>
+          <span class="card-version">帳號尚未加入任何農場</span>
+        </div>
+        <fieldset class="farm-choice compact-choice">
+          <legend>請選擇</legend>
+          <label class="choice-card"><input type="radio" name="onboarding-farm-mode" value="new" checked> 建立新農場</label>
+          <label class="choice-card"><input type="radio" name="onboarding-farm-mode" value="join"> 使用農場編號加入</label>
+        </fieldset>
+        <div class="form-grid two-columns">
+          <label id="onboarding-farm-name-field">農場名稱<input id="onboarding-farm-name" maxlength="60"></label>
+          <label id="onboarding-farm-code-field" hidden>農場編號<input id="onboarding-farm-code" maxlength="11" autocapitalize="characters" placeholder="RF-12AB34CD"></label>
+        </div>
+        <div class="actions"><button id="complete-farm-setup" class="primary">完成農場設定</button></div>
+        <p id="farm-onboarding-status" class="setting-note" role="status"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading">
+          <h2>我的農場</h2>
+          <span class="card-version">農場編號可提供給共同管理者註冊使用</span>
+        </div>
+        <div id="farm-list" class="farm-grid"><p class="empty-state">尚未讀取農場資料。</p></div>
+      </section>
+
+      <section id="rename-farm-card" class="card" hidden>
+        <h2>農場名稱設定</h2>
+        <div class="form-grid two-columns">
+          <label>農場編號<select id="rename-farm-code"></select></label>
+          <label>農場名稱<input id="rename-farm-name" maxlength="60"></label>
+        </div>
+        <div class="actions"><button id="rename-farm" class="primary">儲存農場名稱</button></div>
+      </section>
+
+      <section class="card table-card">
+        <div class="card-heading">
+          <h2>農場監控桿</h2>
+          <span id="farm-device-count" class="card-version">共 0 支</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>農場</th><th>裝置編號</th><th>GPS 位置</th><th>定位精度</th><th>更新時間</th><th>操作</th></tr></thead>
+            <tbody id="farm-device-rows"><tr><td colspan="6">尚無監控桿資料</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section id="connect-view" class="app-view" hidden>
       <section class="card" id="ble-device-controls">
         <div class="card-heading">
           <h2>裝置連線</h2>
@@ -44,32 +207,30 @@
           <h2>圖片校正</h2>
           <span class="card-version">照片只保存在此手機</span>
         </div>
-        <p id="calibration-description" class="setting-note">先連接BLE，再取得ESP32-CAM目前用於辨識的灰階照片；彩色線條顯示晶片實際算出的尺規與水面位置。</p>
-        <div class="actions">
-          <button id="capture-calibration" class="primary" disabled>拍照測試並回傳</button>
-        </div>
+        <p id="calibration-description" class="setting-note">先連接 BLE，再取得 ESP32-CAM 目前用於辨識的灰階照片；彩色線條顯示晶片實際算出的尺規與水面位置。</p>
+        <div class="actions"><button id="capture-calibration" class="primary" disabled>拍照測試並回傳</button></div>
         <progress id="calibration-progress" max="1" value="0"></progress>
-        <p id="calibration-status" class="calibration-status" role="status">尚未連接支援校正照片的ESP32-CAM。</p>
+        <p id="calibration-status" class="calibration-status" role="status">尚未連接支援校正照片的 ESP32-CAM。</p>
+        <p id="calibration-orientation-warning" class="calibration-warning" role="alert" hidden>目前檢測到的圖像方向錯誤</p>
         <div class="calibration-history">
-          <label>先前照片
-            <select id="calibration-photo-select" disabled></select>
-          </label>
+          <label>先前照片<select id="calibration-photo-select" disabled></select></label>
           <button id="delete-calibration-photo" class="danger" disabled>刪除選取照片</button>
         </div>
         <figure class="calibration-viewer">
-          <canvas id="calibration-image" width="320" height="240" hidden></canvas>
+          <canvas id="calibration-image" width="240" height="320" hidden></canvas>
           <p id="calibration-empty">手機中尚無校正照片。</p>
-          <figcaption id="calibration-metadata">照片只保存在此手機瀏覽器，不會上傳Supabase。</figcaption>
+          <figcaption id="calibration-metadata">照片只保存在此手機瀏覽器，不會上傳 Supabase。</figcaption>
         </figure>
       </section>
 
       <section class="summary">
+        <article><span>目前農場</span><strong id="current-farm-code">—</strong></article>
         <article><span>裝置</span><strong id="device-id">—</strong></article>
         <article><span>待下載</span><strong id="device-count">—</strong></article>
         <article><span>手機已存</span><strong id="local-count">0</strong></article>
         <article><span>裝置 UTC</span><strong id="device-time">—</strong></article>
         <article><span>韌體版本</span><strong id="firmware-version">—</strong></article>
-        <article><span>App 版本</span><strong id="app-version" data-app-version>0.9.0+9</strong></article>
+        <article><span>App 版本</span><strong id="app-version" data-app-version>0.10.0+2</strong></article>
         <article><span>首次設定</span><strong id="device-setup-status">—</strong></article>
         <article><span>雲端同步</span><strong id="cloud-status">未設定</strong></article>
         <article><span>裝置定位</span><strong id="device-location-status">尚未取得</strong></article>
@@ -79,12 +240,12 @@
         <h2>設定</h2>
         <div class="form-grid">
           <label>裝置 ID<input id="setting-id" maxlength="8" placeholder="RICE0001"></label>
+          <label>所屬農場<select id="setting-farm-code"></select></label>
           <label>讀取週期（小時）<input id="setting-interval" type="number" min="1" max="24" value="1"></label>
           <label>水深修正（mm）<input id="setting-offset" type="number" min="-500" max="500" value="0"></label>
         </div>
         <label class="toggle"><input id="setting-climate" type="checkbox"> 啟用 DHT22 溫溼度</label>
-        <p class="setting-note">首次安裝：將監控器固定完成並連接 BLE，設定裝置 ID，再取得手機 GPS 定位並寫入設定。</p>
-        <p class="setting-note">連線測試階段的韌體預設睡眠為 1 分鐘；首次設定完成前不會自動拍照或睡眠。</p>
+        <p class="setting-note">首次安裝：固定監控器並連接 BLE，選擇所屬農場、設定裝置 ID，再取得手機 GPS 定位並寫入設定。</p>
         <p class="setting-note">手機 GPS：<strong id="phone-location">尚未取得；定位只由手機上傳，ESP32 不含 GPS。</strong></p>
         <p class="setting-note">尺規裁切範圍：<strong id="roi-state">尚未學習</strong></p>
         <div class="actions">
@@ -98,7 +259,7 @@
       <section class="card">
         <div class="card-heading">
           <h2>量測與資料</h2>
-          <span class="card-version">系統版本 <strong data-app-version>0.9.0+9</strong></span>
+          <span class="card-version">系統版本 <strong data-app-version>0.10.0+2</strong></span>
         </div>
         <div class="actions">
           <button id="measure">立即量測</button>
@@ -114,7 +275,7 @@
           <button id="clear-local" class="danger">清除手機資料</button>
         </div>
         <progress id="progress" max="1" value="0"></progress>
-        <p id="status" role="status">請按設定按鈕喚醒監控器，再連接 BLE。</p>
+        <p id="status" role="status">請先登入並選擇農場，再連接監控器。</p>
         <p id="cloud-detail" class="cloud-detail" role="status" hidden></p>
       </section>
 
@@ -133,10 +294,10 @@
       <section class="card" id="cloud-charts">
         <div class="card-heading">
           <h2>雲端歷史圖表</h2>
-          <span class="card-version">僅讀取 Supabase，不使用 BLE 或手機下載資料</span>
+          <span class="card-version">只顯示登入帳號所屬農場的監控桿</span>
         </div>
         <div class="chart-controls">
-          <label>裝置 ID<input id="chart-device-id" maxlength="8" placeholder="RICE0001"></label>
+          <label>監控桿<select id="chart-device-id"></select></label>
           <label>顯示範圍
             <select id="chart-range">
               <option value="day">日（0～23 時）</option>
@@ -148,7 +309,7 @@
           <button id="load-cloud-charts" class="primary">讀取雲端圖表</button>
         </div>
         <p id="chart-period-description" class="setting-note">日視圖會依台灣時間顯示 0～23 時的平均值。</p>
-        <p id="chart-status" class="chart-status" role="status">輸入裝置 ID 後即可讀取，不需要連接 BLE。</p>
+        <p id="chart-status" class="chart-status" role="status">請先從農場首頁選擇監控桿。</p>
         <div class="chart-grid">
           <article class="chart-panel"><h3>水位高度／水深（cm）</h3><div class="chart-scroll"><canvas id="chart-water" height="300"></canvas></div><p id="chart-water-readout" class="chart-readout">尚未讀取</p></article>
           <article class="chart-panel"><h3>電池電量（%）</h3><div class="chart-scroll"><canvas id="chart-battery" height="300"></canvas></div><p id="chart-battery-readout" class="chart-readout">資料庫已預留欄位；舊資料可能沒有電池數值。</p></article>
@@ -158,7 +319,7 @@
       </section>
     </section>
   </main>
-  <script src="supabase-config.js?build=0.9.0-9"></script>
+  <script src="supabase-config.js?build=0.10.0-2"></script>
   <script src="version.js"></script>
   <script src="app.js"></script>
 </body>

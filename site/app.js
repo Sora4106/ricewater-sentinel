@@ -9,6 +9,8 @@ const UUID = {
 
 const APP_VERSION = self.RICE_APP_VERSION || document.documentElement.dataset.releaseVersion || '未知版本';
 const MAX_CALIBRATION_IMAGE_BYTES = 1024 * 1024;
+const AUTH_STORAGE_KEY = 'rice-water-auth-session-v1';
+const FARM_STORAGE_KEY = 'rice-water-selected-farm';
 
 const $ = (selector) => document.querySelector(selector);
 const decoder = new TextDecoder();
@@ -25,6 +27,13 @@ let currentLocationDeviceId = null;
 let cloudChartState = null;
 let chartResizeTimer = null;
 let calibrationImageTransfer = null;
+let authSession = null;
+let currentUser = null;
+let currentFarms = [];
+let currentFarmDevices = [];
+let authenticatedAppInitialized = false;
+let splashFinished = false;
+let passwordRecoveryMode = false;
 
 function isIOSSafari() {
   const userAgent = navigator.userAgent || '';
@@ -69,14 +78,224 @@ function getSupabaseConfig() {
   const url = String(raw.url || '').trim().replace(/\/+$/, '');
   const anonKey = String(raw.anonKey || '').trim();
   const table = String(raw.table || 'rice_measurements').trim();
-  const deviceRpc = String(raw.deviceRpc || 'register_rice_device').trim();
-  const chartRpc = String(raw.chartRpc || 'get_rice_chart').trim();
+  const deviceRpc = String(raw.deviceRpc || 'register_rice_device_for_farm').trim();
+  const chartRpc = String(raw.chartRpc || 'get_my_rice_chart').trim();
+  const profileRpc = String(raw.profileRpc || 'complete_rice_profile').trim();
+  const farmsRpc = String(raw.farmsRpc || 'get_my_rice_farms').trim();
+  const devicesRpc = String(raw.devicesRpc || 'get_my_rice_devices').trim();
+  const renameFarmRpc = String(raw.renameFarmRpc || 'rename_my_rice_farm').trim();
   if (!url || !anonKey) return null;
   if (!/^https:\/\//.test(url) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(table) ||
       !/^[A-Za-z_][A-Za-z0-9_]*$/.test(deviceRpc) ||
-      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(chartRpc)) return null;
-  return { url, anonKey, table, deviceRpc, chartRpc };
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(chartRpc) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(profileRpc) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(farmsRpc) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(devicesRpc) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(renameFarmRpc)) return null;
+  return {
+    url, anonKey, table, deviceRpc, chartRpc,
+    profileRpc, farmsRpc, devicesRpc, renameFarmRpc,
+  };
+}
+
+function setAuthStatus(message = '', bad = false) {
+  const target = $('#auth-status');
+  target.textContent = message;
+  target.classList.toggle('error', bad);
+}
+
+function normalizeFarmCode(value) {
+  return String(value || '').trim().replace(/\s+/g, '').toUpperCase();
+}
+
+function authRedirectUrl() {
+  return `${location.origin}${location.pathname}`;
+}
+
+async function responsePayload(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch (_error) { return text; }
+}
+
+function responseError(payload, fallback) {
+  if (typeof payload === 'string' && payload.trim()) return payload.trim();
+  return payload?.msg || payload?.message || payload?.error_description ||
+    payload?.error || fallback;
+}
+
+async function authApi(path, { method = 'POST', body = null, token = '' } = {}) {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error('Supabase 尚未設定，無法使用帳號登入。');
+  const headers = { apikey: config.anonKey };
+  if (body !== null) headers['Content-Type'] = 'application/json';
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${config.url}/auth/v1/${path}`, {
+    method,
+    headers,
+    body: body === null ? undefined : JSON.stringify(body),
+  });
+  const payload = await responsePayload(response);
+  if (!response.ok) {
+    throw new Error(responseError(payload, `帳號服務 HTTP ${response.status}`));
+  }
+  return payload;
+}
+
+function saveAuthSession(payload) {
+  if (!payload?.access_token || !payload?.refresh_token) return false;
+  authSession = {
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+    expires_at: Number(payload.expires_at ||
+      (Math.floor(Date.now() / 1000) + Number(payload.expires_in || 3600))),
+    token_type: payload.token_type || 'bearer',
+    user: payload.user || authSession?.user || null,
+  };
+  currentUser = authSession.user;
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
+  return true;
+}
+
+function clearAuthSession() {
+  authSession = null;
+  currentUser = null;
+  currentFarms = [];
+  currentFarmDevices = [];
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+async function refreshAuthSession() {
+  if (!authSession?.refresh_token) throw new Error('登入狀態已失效，請重新登入。');
+  const payload = await authApi('token?grant_type=refresh_token', {
+    body: { refresh_token: authSession.refresh_token },
+  });
+  if (!saveAuthSession(payload)) throw new Error('無法更新登入狀態。');
+  return authSession;
+}
+
+async function accessToken() {
+  if (!authSession?.access_token) throw new Error('請先登入系統。');
+  const now = Math.floor(Date.now() / 1000);
+  if (!authSession.expires_at || authSession.expires_at <= now + 60) {
+    await refreshAuthSession();
+  }
+  return authSession.access_token;
+}
+
+async function cloudHeaders(includeJson = true) {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error('Supabase 尚未設定。');
+  const headers = {
+    apikey: config.anonKey,
+    Authorization: `Bearer ${await accessToken()}`,
+  };
+  if (includeJson) headers['Content-Type'] = 'application/json';
+  return headers;
+}
+
+async function cloudRpc(rpcName, body = {}) {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error('Supabase 尚未設定。');
+  const response = await fetch(
+    `${config.url}/rest/v1/rpc/${encodeURIComponent(rpcName)}`,
+    { method: 'POST', headers: await cloudHeaders(), body: JSON.stringify(body) },
+  );
+  const payload = await responsePayload(response);
+  if (!response.ok) {
+    throw new Error(`Supabase HTTP ${response.status}：${responseError(payload, 'RPC 執行失敗')}`);
+  }
+  return payload;
+}
+
+function showAuthPanel(panel) {
+  const panels = {
+    login: '#login-form',
+    register: '#register-form',
+    forgot: '#forgot-form',
+    reset: '#reset-password-form',
+  };
+  Object.entries(panels).forEach(([name, selector]) => {
+    $(selector).hidden = name !== panel;
+  });
+  $('#auth-tabs').hidden = panel === 'forgot' || panel === 'reset';
+  $('#show-login').classList.toggle('primary', panel === 'login');
+  $('#show-register').classList.toggle('primary', panel === 'register');
+  $('#show-login').setAttribute('aria-selected', String(panel === 'login'));
+  $('#show-register').setAttribute('aria-selected', String(panel === 'register'));
+  setAuthStatus();
+}
+
+function showLoggedOutScreen(panel = 'login') {
+  $('#app-shell').hidden = true;
+  $('#auth-screen').hidden = false;
+  showAuthPanel(panel);
+}
+
+function sessionFromLocationHash() {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if (!hash.get('access_token')) return false;
+  const saved = saveAuthSession({
+    access_token: hash.get('access_token'),
+    refresh_token: hash.get('refresh_token'),
+    expires_in: Number(hash.get('expires_in') || 3600),
+    token_type: hash.get('token_type') || 'bearer',
+  });
+  passwordRecoveryMode = hash.get('type') === 'recovery';
+  history.replaceState(null, document.title, `${location.pathname}${location.search}`);
+  return saved;
+}
+
+async function restoreAuthSession() {
+  sessionFromLocationHash();
+  if (!authSession) {
+    try { authSession = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || 'null'); }
+    catch (_error) { clearAuthSession(); }
+  }
+  if (!authSession?.access_token) return false;
+  try {
+    await accessToken();
+    const user = await authApi('user', { method: 'GET', token: authSession.access_token });
+    currentUser = user;
+    authSession.user = user;
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
+    return true;
+  } catch (_error) {
+    clearAuthSession();
+    return false;
+  }
+}
+
+async function finishSplash() {
+  if (splashFinished) return;
+  splashFinished = true;
+  $('#splash-screen').hidden = true;
+  const loggedIn = await restoreAuthSession();
+  if (passwordRecoveryMode && loggedIn) {
+    $('#auth-screen').hidden = false;
+    showAuthPanel('reset');
+    setAuthStatus('請設定新的登入密碼。');
+    return;
+  }
+  if (loggedIn) {
+    await enterAuthenticatedApp();
+  } else {
+    showLoggedOutScreen();
+  }
+}
+
+function startSplash() {
+  const splash = $('#splash-screen');
+  const skip = () => finishSplash().catch((error) => {
+    showLoggedOutScreen();
+    setAuthStatus(error.message, true);
+  });
+  splash.addEventListener('pointerup', skip, { once: true });
+  splash.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') skip();
+  }, { once: true });
+  window.setTimeout(skip, 5000);
 }
 
 function setCloudDetail(message = '') {
@@ -94,15 +313,15 @@ function cloudDiagnosticMessage(errorMessage) {
   }
   if (/Supabase HTTP 401/.test(raw)) {
     if (/42501|row-level security/i.test(raw)) {
-      return '雲端診斷：HTTP 401／42501，已連上 Supabase，但 rice_measurements 的 RLS 拒絕新增資料；請執行專案內的 fix_anon_insert_policy.sql。';
+      return '雲端診斷：登入帳號沒有這個農場或監控桿的存取權限；請確認農場編號，並執行最新的 add_auth_farm_accounts.sql。';
     }
-    return '雲端診斷：HTTP 401，Supabase 拒絕此 API key；請確認 Project URL 與 publishable key。';
+    return '雲端診斷：登入狀態或 Supabase publishable key 無效，請重新登入並確認雲端設定。';
   }
   if (/Supabase HTTP 403/.test(raw)) {
     return '雲端診斷：HTTP 403，資料表的 RLS 新增權限拒絕此筆資料。';
   }
   if (/Supabase HTTP 404/.test(raw)) {
-    return '雲端診斷：HTTP 404，找不到 Supabase 資料表、裝置登錄或圖表函式；請確認已執行最新 SQL。';
+    return '雲端診斷：HTTP 404，找不到農場、裝置登錄或圖表函式；請執行 add_auth_farm_accounts.sql。';
   }
   if (/Supabase HTTP 409/.test(raw)) {
     return '雲端診斷：HTTP 409，資料表主鍵或 upsert 設定不符合預期。';
@@ -183,10 +402,15 @@ function parseRecord(value) {
 function createCloudTestRecord() {
   const now = Date.now();
   const testValue = `PWA_TEST_${now}`;
+  const farmDeviceId = info?.id || currentFarmDevices[0]?.device_id;
+  if (!farmDeviceId) {
+    throw new Error('請先完成監控桿登錄，再測試雲端上傳。');
+  }
   return {
-    // Keep synthetic records separate from actual device measurements while
-    // exercising the identical IndexedDB -> Supabase upload path.
-    deviceId: `TEST-${info?.id || 'PWA'}`,
+    // The authenticated RLS policy requires a monitor that belongs to one of
+    // this user's farms. A very large sequence keeps the synthetic row apart
+    // from real ESP32 sequence numbers.
+    deviceId: farmDeviceId,
     firmwareVersion: info?.fw || 'PWA-TEST',
     appVersion: APP_VERSION,
     sequence: now,
@@ -206,7 +430,7 @@ function createCloudTestRecord() {
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open('rice-water-monitor', 4);
+    const request = indexedDB.open('rice-water-monitor', 5);
     request.onupgradeneeded = () => {
       const db = request.result;
       const store = db.objectStoreNames.contains('records')
@@ -216,11 +440,15 @@ function openDb() {
       if (!store.indexNames.contains('cloudStatus')) {
         store.createIndex('cloudStatus', 'cloudStatus');
       }
+      if (!store.indexNames.contains('account')) store.createIndex('account', 'accountUserId');
       const deviceStore = db.objectStoreNames.contains('deviceConfigs')
         ? request.transaction.objectStore('deviceConfigs')
         : db.createObjectStore('deviceConfigs', { keyPath: 'deviceId' });
       if (!deviceStore.indexNames.contains('cloudStatus')) {
         deviceStore.createIndex('cloudStatus', 'cloudStatus');
+      }
+      if (!deviceStore.indexNames.contains('account')) {
+        deviceStore.createIndex('account', 'accountUserId');
       }
       const photoStore = db.objectStoreNames.contains('calibrationPhotos')
         ? request.transaction.objectStore('calibrationPhotos')
@@ -231,11 +459,39 @@ function openDb() {
       if (!photoStore.indexNames.contains('capturedAt')) {
         photoStore.createIndex('capturedAt', 'capturedAt');
       }
+      if (!photoStore.indexNames.contains('account')) {
+        photoStore.createIndex('account', 'accountUserId');
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
   return dbPromise;
+}
+
+async function claimLegacyLocalData() {
+  if (!currentUser?.id) return;
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const storeNames = ['records', 'deviceConfigs', 'calibrationPhotos'];
+    const tx = db.transaction(storeNames, 'readwrite');
+    for (const storeName of storeNames) {
+      const cursor = tx.objectStore(storeName).openCursor();
+      cursor.onsuccess = () => {
+        const item = cursor.result;
+        if (!item) return;
+        if (!item.value.accountUserId) {
+          item.value.accountUserId = currentUser.id;
+          item.update(item.value);
+        }
+        item.continue();
+      };
+      cursor.onerror = () => tx.abort();
+    }
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('手機舊資料帳號歸屬更新失敗'));
+  });
 }
 
 async function saveRecords(records) {
@@ -249,6 +505,7 @@ async function saveRecords(records) {
         const existing = lookup.result;
         store.put({
           ...record,
+          accountUserId: currentUser?.id || existing?.accountUserId || null,
           cloudStatus: existing?.cloudStatus || 'pending',
           cloudSyncedAt: existing?.cloudSyncedAt || null,
           cloudError: existing?.cloudError || null,
@@ -268,7 +525,9 @@ async function getLocalRecords() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('records', 'readonly');
     const request = tx.objectStore('records').getAll();
-    request.onsuccess = () => resolve(request.result.sort((a, b) => b.sequence - a.sequence));
+    request.onsuccess = () => resolve(request.result
+      .filter((record) => record.accountUserId === currentUser?.id)
+      .sort((a, b) => b.sequence - a.sequence));
     request.onerror = () => reject(request.error);
   });
 }
@@ -277,7 +536,14 @@ async function clearLocalRecords() {
   const db = await openDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction('records', 'readwrite');
-    tx.objectStore('records').clear();
+    const cursor = tx.objectStore('records').openCursor();
+    cursor.onsuccess = () => {
+      const item = cursor.result;
+      if (!item) return;
+      if (item.value.accountUserId === currentUser?.id) item.delete();
+      item.continue();
+    };
+    cursor.onerror = () => tx.abort();
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
   });
@@ -287,7 +553,10 @@ async function saveCalibrationPhoto(photo) {
   const db = await openDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction('calibrationPhotos', 'readwrite');
-    tx.objectStore('calibrationPhotos').put(photo);
+    tx.objectStore('calibrationPhotos').put({
+      ...photo,
+      accountUserId: currentUser?.id || null,
+    });
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error || new Error('校正照片儲存失敗'));
@@ -300,7 +569,9 @@ async function getCalibrationPhotos() {
     const tx = db.transaction('calibrationPhotos', 'readonly');
     const request = tx.objectStore('calibrationPhotos').getAll();
     request.onsuccess = () => resolve(
-      request.result.sort((a, b) => (b.capturedAt || 0) - (a.capturedAt || 0))
+      request.result
+        .filter((photo) => photo.accountUserId === currentUser?.id)
+        .sort((a, b) => (b.capturedAt || 0) - (a.capturedAt || 0))
     );
     request.onerror = () => reject(request.error);
   });
@@ -358,6 +629,7 @@ async function saveDeviceConfig(config) {
       store.put({
         ...existing,
         ...config,
+        accountUserId: currentUser?.id || existing?.accountUserId || null,
         installedAt: existing?.installedAt || config.installedAt || Date.now(),
         cloudStatus: 'pending',
         cloudSyncedAt: existing?.cloudSyncedAt || null,
@@ -377,7 +649,9 @@ async function getDeviceConfig(deviceId) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('deviceConfigs', 'readonly');
     const request = tx.objectStore('deviceConfigs').get(deviceId);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(
+      request.result?.accountUserId === currentUser?.id ? request.result : null
+    );
     request.onerror = () => reject(request.error);
   });
 }
@@ -387,7 +661,9 @@ async function getDeviceConfigs() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('deviceConfigs', 'readonly');
     const request = tx.objectStore('deviceConfigs').getAll();
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve(
+      request.result.filter((config) => config.accountUserId === currentUser?.id)
+    );
     request.onerror = () => reject(request.error);
   });
 }
@@ -416,6 +692,7 @@ async function markDeviceConfig(config, status, errorMessage = null) {
 
 function deviceRpcBody(config) {
   return {
+    p_farm_code: config.farmCode || selectedFarmCode(),
     p_device_id: config.deviceId,
     p_latitude: config.latitude,
     p_longitude: config.longitude,
@@ -444,10 +721,7 @@ async function syncDeviceConfigsToCloud(configs) {
         `${cloudConfig.url}/rest/v1/rpc/${encodeURIComponent(cloudConfig.deviceRpc)}`,
         {
           method: 'POST',
-          headers: {
-            apikey: cloudConfig.anonKey,
-            'Content-Type': 'application/json',
-          },
+          headers: await cloudHeaders(),
           body: JSON.stringify(deviceRpcBody(deviceConfig)),
         },
       );
@@ -488,11 +762,7 @@ async function insertCloudRecords(config, records) {
     `${config.url}/rest/v1/${encodeURIComponent(config.table)}`,
     {
       method: 'POST',
-      headers: {
-        apikey: config.anonKey,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      },
+      headers: { ...(await cloudHeaders()), Prefer: 'return=minimal' },
       body: cloudRequestBody(records),
     },
   );
@@ -588,21 +858,10 @@ async function testSupabaseConnection() {
   }
 
   try {
-    // The Auth settings endpoint verifies the project URL, publishable key,
-    // HTTPS and CORS without requiring table permission or writing a test row.
-    const response = await fetch(
-      `${config.url}/auth/v1/settings`,
-      {
-        method: 'GET',
-        headers: { apikey: config.anonKey },
-      },
-    );
-    if (!response.ok) {
-      const detail = (await response.text()).slice(0, 240);
-      throw new Error(`Supabase HTTP ${response.status}${detail ? `：${detail}` : ''}`);
-    }
+    const user = await authApi('user', { method: 'GET', token: await accessToken() });
+    const farms = await cloudRpc(config.farmsRpc);
     setCloudSummary('連線正常');
-    showStatus(`Supabase 連線測試成功（HTTP ${response.status}）；此按鈕只檢查專案與 API key，不檢查資料表或寫入權限。`);
+    showStatus(`Supabase 登入與農場權限測試成功：${user.email}，可存取 ${farms.length} 個農場。`);
   } catch (error) {
     const detail = cloudDiagnosticMessage(error.message);
     setCloudSummary('連線失敗', true, detail);
@@ -843,10 +1102,7 @@ async function loadCloudCharts() {
     `${config.url}/rest/v1/rpc/${encodeURIComponent(config.chartRpc)}`,
     {
       method: 'POST',
-      headers: {
-        apikey: config.anonKey,
-        'Content-Type': 'application/json',
-      },
+      headers: await cloudHeaders(),
       body: JSON.stringify({
         p_device_id: deviceId,
         p_range_type: period.range,
@@ -883,14 +1139,8 @@ async function loadCloudCharts() {
 
 async function initializeCloudCharts() {
   $('#chart-date').value = localIsoDate();
-  let deviceId = localStorage.getItem('rice-chart-device-id') || '';
-  if (!deviceId) {
-    const configs = await getDeviceConfigs();
-    const latest = [...configs].sort((a, b) =>
-      (b.installedAt || 0) - (a.installedAt || 0))[0];
-    deviceId = latest?.deviceId || '';
-  }
-  $('#chart-device-id').value = deviceId;
+  populateChartDevices();
+  const deviceId = $('#chart-device-id').value;
   updateChartPeriodDescription();
   if (deviceId) await loadCloudCharts();
 }
@@ -902,6 +1152,7 @@ function formatValue(value, divisor, suffix) {
 
 function measurementStatus(record) {
   if (record.cloudTestValue) return `雲端測試（${record.cloudTestValue}）`;
+  if ((record.flags & 0x81) === 0x81) return '圖像方向錯誤';
   if (!(record.flags & 0x01)) {
     return (record.flags & 0x80) ? '查無尺規' : '相機取像失敗';
   }
@@ -979,6 +1230,203 @@ function requestPhoneLocation() {
   });
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function selectedFarmCode() {
+  const saved = normalizeFarmCode(localStorage.getItem(FARM_STORAGE_KEY));
+  if (currentFarms.some((farm) => farm.farm_code === saved)) return saved;
+  return currentFarms[0]?.farm_code || '';
+}
+
+function chooseFarm(farmCode) {
+  const normalized = normalizeFarmCode(farmCode);
+  if (!currentFarms.some((farm) => farm.farm_code === normalized)) return;
+  localStorage.setItem(FARM_STORAGE_KEY, normalized);
+  $('#current-farm-code').textContent = normalized;
+  $('#setting-farm-code').value = normalized;
+  renderFarmDashboard();
+}
+
+function populateFarmSelectors() {
+  const selected = selectedFarmCode();
+  const settingSelect = $('#setting-farm-code');
+  settingSelect.replaceChildren();
+  for (const farm of currentFarms) {
+    const option = document.createElement('option');
+    option.value = farm.farm_code;
+    option.textContent = `${farm.farm_name}（${farm.farm_code}）`;
+    settingSelect.append(option);
+  }
+  settingSelect.disabled = currentFarms.length === 0;
+  if (selected) settingSelect.value = selected;
+  $('#current-farm-code').textContent = selected || '—';
+
+  const owners = currentFarms.filter((farm) => farm.member_role === 'owner');
+  const renameCard = $('#rename-farm-card');
+  const renameSelect = $('#rename-farm-code');
+  renameSelect.replaceChildren();
+  for (const farm of owners) {
+    const option = document.createElement('option');
+    option.value = farm.farm_code;
+    option.textContent = `${farm.farm_name}（${farm.farm_code}）`;
+    renameSelect.append(option);
+  }
+  renameCard.hidden = owners.length === 0;
+  if (owners.length) {
+    const selectedOwner = owners.find((farm) => farm.farm_code === selected) || owners[0];
+    renameSelect.value = selectedOwner.farm_code;
+    $('#rename-farm-name').value = selectedOwner.farm_name;
+  }
+}
+
+function populateChartDevices() {
+  const select = $('#chart-device-id');
+  const previous = select.value || localStorage.getItem('rice-chart-device-id') || '';
+  select.replaceChildren();
+  for (const row of currentFarmDevices) {
+    const option = document.createElement('option');
+    option.value = row.device_id;
+    option.textContent = `${row.device_id}｜${row.farm_name}`;
+    select.append(option);
+  }
+  const available = currentFarmDevices.some((row) => row.device_id === previous);
+  if (available) select.value = previous;
+  select.disabled = currentFarmDevices.length === 0;
+  $('#load-cloud-charts').disabled = currentFarmDevices.length === 0;
+}
+
+function renderFarmDashboard() {
+  const selected = selectedFarmCode();
+  const displayName = currentUser?.user_metadata?.display_name ||
+    currentUser?.email?.split('@')[0] || '農場夥伴';
+  $('#farm-welcome').textContent = `${displayName}，歡迎回來`;
+  $('#account-summary').textContent = currentUser?.email
+    ? `${currentUser.email}${selected ? `｜目前農場 ${selected}` : ''}`
+    : '已登入';
+  $('#farm-overview').textContent = currentFarms.length
+    ? `您目前可管理 ${currentFarms.length} 個農場、${currentFarmDevices.length} 支監控桿。`
+    : '此帳號尚未加入農場，請完成下方設定。';
+  $('#farm-onboarding').hidden = currentFarms.length > 0;
+
+  const farmList = $('#farm-list');
+  if (!currentFarms.length) {
+    farmList.innerHTML = '<p class="empty-state">尚未建立或加入農場。</p>';
+  } else {
+    farmList.innerHTML = currentFarms.map((farm) => `
+      <article class="farm-tile">
+        <h3>${escapeHtml(farm.farm_name)}</h3>
+        <p class="farm-code">${escapeHtml(farm.farm_code)}</p>
+        <p class="farm-meta">${farm.member_role === 'owner' ? '農場建立者' : '共同管理者'}・${Number(farm.device_count || 0)} 支監控桿</p>
+        <div class="actions">
+          <button class="table-action ${farm.farm_code === selected ? 'primary' : ''}" data-select-farm="${escapeHtml(farm.farm_code)}">${farm.farm_code === selected ? '目前農場' : '切換農場'}</button>
+          <button class="table-action gold-button" data-copy-farm="${escapeHtml(farm.farm_code)}">複製農場編號</button>
+        </div>
+      </article>`).join('');
+  }
+
+  const rows = $('#farm-device-rows');
+  rows.innerHTML = currentFarmDevices.length
+    ? currentFarmDevices.map((row) => {
+      const latitude = Number(row.latitude);
+      const longitude = Number(row.longitude);
+      const validLocation = Number.isFinite(latitude) && Number.isFinite(longitude);
+      const locationText = validLocation
+        ? `<a class="map-link" href="https://maps.google.com/?q=${latitude},${longitude}" target="_blank" rel="noopener">${latitude.toFixed(6)}, ${longitude.toFixed(6)}</a>`
+        : '尚無定位';
+      const accuracy = Number.isFinite(Number(row.accuracy_m))
+        ? `±${Math.round(Number(row.accuracy_m))} m`
+        : '—';
+      const updated = row.updated_at ? new Date(row.updated_at).toLocaleString() : '—';
+      return `<tr><td>${escapeHtml(row.farm_name)}</td><td>${escapeHtml(row.device_id)}</td>` +
+        `<td>${locationText}</td><td>${accuracy}</td><td>${escapeHtml(updated)}</td>` +
+        `<td><button class="table-action" data-device-history="${escapeHtml(row.device_id)}">查看歷史</button></td></tr>`;
+    }).join('')
+    : '<tr><td colspan="6">此帳號的農場尚無監控桿資料</td></tr>';
+  $('#farm-device-count').textContent = `共 ${currentFarmDevices.length} 支`;
+  populateFarmSelectors();
+  populateChartDevices();
+}
+
+async function completeRiceProfile({ displayName, farmMode, farmName = '', farmCode = '' }) {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error('Supabase 尚未設定。');
+  return cloudRpc(config.profileRpc, {
+    p_display_name: String(displayName || '').trim(),
+    p_farm_mode: farmMode,
+    p_farm_name: String(farmName || '').trim() || null,
+    p_farm_code: normalizeFarmCode(farmCode) || null,
+  });
+}
+
+async function fetchFarmData({ autoProvision = true } = {}) {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error('Supabase 尚未設定。');
+  currentFarms = await cloudRpc(config.farmsRpc);
+  if (!Array.isArray(currentFarms)) currentFarms = [];
+
+  if (!currentFarms.length && autoProvision) {
+    const metadata = currentUser?.user_metadata || {};
+    if (metadata.farm_mode === 'new' || metadata.farm_mode === 'join') {
+      try {
+        await completeRiceProfile({
+          displayName: metadata.display_name || currentUser?.email || '農場使用者',
+          farmMode: metadata.farm_mode,
+          farmName: metadata.farm_name || '',
+          farmCode: metadata.farm_code || '',
+        });
+        currentFarms = await cloudRpc(config.farmsRpc);
+      } catch (error) {
+        $('#farm-onboarding-status').textContent = `自動建立農場未完成：${error.message}`;
+      }
+    }
+  }
+
+  currentFarmDevices = await cloudRpc(config.devicesRpc);
+  if (!Array.isArray(currentFarmDevices)) currentFarmDevices = [];
+  const selected = selectedFarmCode();
+  if (selected) localStorage.setItem(FARM_STORAGE_KEY, selected);
+  renderFarmDashboard();
+}
+
+async function enterAuthenticatedApp() {
+  $('#auth-screen').hidden = true;
+  $('#app-shell').hidden = false;
+  await claimLegacyLocalData();
+  await fetchFarmData();
+  selectAppView('farm');
+  if (!authenticatedAppInitialized) {
+    authenticatedAppInitialized = true;
+    updateBleRuntime();
+    await Promise.all([renderRecords(), renderCalibrationPhotos()]);
+    if (currentFarms.length) await syncAllPendingCloudData();
+    await initializeCloudCharts();
+  }
+}
+
+async function signOutAccount() {
+  try {
+    if (authSession?.access_token) {
+      await authApi('logout', { token: authSession.access_token });
+    }
+  } catch (_error) {
+    // A local sign-out must still complete if the device is temporarily offline.
+  }
+  if (device?.gatt?.connected) device.gatt.disconnect();
+  clearAuthSession();
+  cloudChartState = null;
+  authenticatedAppInitialized = false;
+  localStorage.removeItem(FARM_STORAGE_KEY);
+  showLoggedOutScreen();
+  setAuthStatus('已安全登出。');
+}
+
 async function renderRecords() {
   const [records, deviceConfigs] = await Promise.all([
     getLocalRecords(),
@@ -1038,8 +1486,13 @@ function setCalibrationStatus(message, bad = false) {
   target.classList.toggle('error', bad);
 }
 
+function setCalibrationOrientationWarning(visible) {
+  $('#calibration-orientation-warning').hidden = !visible;
+}
+
 function calibrationFlagText(flags) {
   const parts = [];
+  if (flags & 0x80) parts.push('圖像方向錯誤');
   parts.push(flags & 0x01 ? '已找到定位圖示' : '未找到定位圖示');
   parts.push(flags & 0x02 ? '已找到水面' : '未找到水面');
   if (flags & 0x04) parts.push('已使用LED補光');
@@ -1138,6 +1591,7 @@ function drawCalibrationPhoto(photo) {
   if (!photo) {
     canvas.hidden = true;
     empty.hidden = false;
+    setCalibrationOrientationWarning(false);
     metadata.textContent = '照片只保存在此手機瀏覽器，不會上傳 Supabase。';
     return;
   }
@@ -1165,6 +1619,7 @@ function drawCalibrationPhoto(photo) {
   const overlayDrawn = drawCalibrationOverlay(context, photo);
   canvas.hidden = false;
   empty.hidden = true;
+  setCalibrationOrientationWarning(Boolean(Number(photo.flags || 0) & 0x80));
   metadata.textContent = `${photo.deviceId}｜${new Date(photo.capturedAt).toLocaleString()}｜` +
     `${photo.width}×${photo.height}｜品質 ${photo.quality}｜${calibrationFlagText(photo.flags)}` +
     (directionMarkerDrawn ? '｜↑ 為旋轉後畫面頂端' : '') +
@@ -1235,7 +1690,11 @@ async function finishCalibrationImage(totalChunks, endCrc32) {
   await renderCalibrationPhotos(photo.id);
   $('#calibration-progress').value = 1;
   $('#capture-calibration').disabled = !chars.image;
-  setCalibrationStatus(`校正照片已保存於手機：${calibrationFlagText(photo.flags)}。`);
+  const orientationError = Boolean(photo.flags & 0x80);
+  setCalibrationOrientationWarning(orientationError);
+  setCalibrationStatus(orientationError
+    ? '目前檢測到的圖像方向錯誤；照片仍已保存於手機供檢查。'
+    : `校正照片已保存於手機：${calibrationFlagText(photo.flags)}。`, orientationError);
   readInfo().catch(() => {});
 }
 
@@ -1272,6 +1731,7 @@ function onImage(event) {
         chunks: new Map(),
         receivedBytes: 0,
       };
+      setCalibrationOrientationWarning(Boolean(bytes[18] & 0x80));
       $('#calibration-progress').value = 0;
       setCalibrationStatus(`開始接收 ${width}×${height} 校正照片。`);
       return;
@@ -1340,6 +1800,7 @@ function onImage(event) {
 async function captureCalibrationImage() {
   if (!chars.image) throw new Error('目前韌體不支援校正照片，請更新ESP32-CAM韌體');
   calibrationImageTransfer = null;
+  setCalibrationOrientationWarning(false);
   $('#calibration-progress').value = 0;
   $('#capture-calibration').disabled = true;
   const photoCaptureEnabled = Boolean(info?.photo_test) || !info?.test_mode;
@@ -1559,12 +2020,17 @@ function onEvent(event) {
   } else if (message === 'ERR,SETUP_REQUIRED') {
     showStatus('裝置尚未完成首次設定，不會執行量測或進入睡眠。', true);
   } else if (message === 'IMG_WAIT') {
+    setCalibrationOrientationWarning(false);
     setCalibrationStatus('ESP32-CAM正在拍攝與分析，暗場時會自動使用LED補光。');
   } else if (message.startsWith('IMG_READY,')) {
     setCalibrationStatus(`照片 ${message.split(',')[1]} 已拍攝，準備接收。`);
   } else if (message.startsWith('IMG_DONE,')) {
     // The image characteristic carries the verified end packet. Persistence is
     // completed there; this event only confirms that the camera buffer closed.
+  } else if (message === 'ERR,IMG_ORIENTATION') {
+    setCalibrationOrientationWarning(true);
+    setCalibrationStatus('目前檢測到的圖像方向錯誤；正確方向必須是左側尺標、右側定位圖案。', true);
+    showStatus('目前檢測到的圖像方向錯誤。', true);
   } else if (message.startsWith('ERR,IMG_')) {
     calibrationImageTransfer = null;
     $('#capture-calibration').disabled = !chars.image;
@@ -1598,23 +2064,219 @@ async function guarded(action) {
   try { await action(); } catch (error) { showStatus(error.message, true); }
 }
 
+function updateFarmModeFields(groupName, prefix) {
+  const mode = document.querySelector(`input[name="${groupName}"]:checked`)?.value || 'new';
+  $(`#${prefix}-farm-name-field`).hidden = mode !== 'new';
+  $(`#${prefix}-farm-code-field`).hidden = mode !== 'join';
+}
+
 function selectAppView(view) {
+  const showFarm = view === 'farm';
+  const showConnect = view === 'connect';
   const showHistory = view === 'history';
-  $('#connect-view').hidden = showHistory;
+  $('#farm-view').hidden = !showFarm;
+  $('#connect-view').hidden = !showConnect;
   $('#history-view').hidden = !showHistory;
-  $('#view-connect').classList.toggle('primary', !showHistory);
+  $('#view-farm').classList.toggle('primary', showFarm);
+  $('#view-connect').classList.toggle('primary', showConnect);
   $('#view-history').classList.toggle('primary', showHistory);
-  $('#view-connect').setAttribute('aria-pressed', String(!showHistory));
+  $('#view-farm').setAttribute('aria-pressed', String(showFarm));
+  $('#view-connect').setAttribute('aria-pressed', String(showConnect));
   $('#view-history').setAttribute('aria-pressed', String(showHistory));
   if (showHistory && cloudChartState) {
     requestAnimationFrame(renderCloudCharts);
   }
 }
 
+$('#show-login').addEventListener('click', () => showAuthPanel('login'));
+$('#show-register').addEventListener('click', () => showAuthPanel('register'));
+$('#show-forgot-password').addEventListener('click', () => {
+  $('#forgot-email').value = $('#login-email').value;
+  showAuthPanel('forgot');
+});
+$('#back-to-login').addEventListener('click', () => showAuthPanel('login'));
+document.querySelectorAll('input[name="register-farm-mode"]').forEach((input) =>
+  input.addEventListener('change', () => updateFarmModeFields('register-farm-mode', 'register')));
+document.querySelectorAll('input[name="onboarding-farm-mode"]').forEach((input) =>
+  input.addEventListener('change', () => updateFarmModeFields('onboarding-farm-mode', 'onboarding')));
+
+$('#login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  setAuthStatus('正在登入…');
+  try {
+    const payload = await authApi('token?grant_type=password', {
+      body: {
+        email: $('#login-email').value.trim(),
+        password: $('#login-password').value,
+      },
+    });
+    if (!saveAuthSession(payload)) throw new Error('登入回應沒有有效 Session。');
+    currentUser = payload.user;
+    setAuthStatus('登入成功，正在讀取農場資料…');
+    await enterAuthenticatedApp();
+  } catch (error) {
+    setAuthStatus(`登入失敗：${error.message}`, true);
+  }
+});
+
+$('#register-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const email = $('#register-email').value.trim();
+  const password = $('#register-password').value;
+  const confirmation = $('#register-password-confirm').value;
+  const displayName = $('#register-name').value.trim();
+  const farmMode = document.querySelector('input[name="register-farm-mode"]:checked')?.value || 'new';
+  const farmName = $('#register-farm-name').value.trim();
+  const farmCode = normalizeFarmCode($('#register-farm-code').value);
+  if (password !== confirmation) {
+    setAuthStatus('兩次輸入的密碼不一致。', true);
+    return;
+  }
+  if (password.length < 8) {
+    setAuthStatus('密碼至少需要 8 個字元。', true);
+    return;
+  }
+  if (farmMode === 'new' && !farmName) {
+    setAuthStatus('建立新農場時請輸入農場名稱。', true);
+    return;
+  }
+  if (farmMode === 'join' && !/^RF-[A-Z0-9]{8}$/.test(farmCode)) {
+    setAuthStatus('農場編號格式應為 RF- 加上 8 位英數字。', true);
+    return;
+  }
+
+  setAuthStatus('正在建立帳號…');
+  try {
+    const config = getSupabaseConfig();
+    if (!config) throw new Error('Supabase 尚未設定。');
+    const path = `signup?redirect_to=${encodeURIComponent(authRedirectUrl())}`;
+    const payload = await authApi(path, {
+      body: {
+        email,
+        password,
+        data: {
+          display_name: displayName,
+          farm_mode: farmMode,
+          farm_name: farmMode === 'new' ? farmName : null,
+          farm_code: farmMode === 'join' ? farmCode : null,
+        },
+      },
+    });
+    if (payload?.access_token && saveAuthSession(payload)) {
+      currentUser = payload.user;
+      await enterAuthenticatedApp();
+      return;
+    }
+    showAuthPanel('login');
+    $('#login-email').value = email;
+    setAuthStatus('帳號已建立，請先到信箱完成驗證，再回來登入。');
+  } catch (error) {
+    setAuthStatus(`註冊失敗：${error.message}`, true);
+  }
+});
+
+$('#forgot-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  setAuthStatus('正在寄送密碼重設信…');
+  try {
+    const path = `recover?redirect_to=${encodeURIComponent(authRedirectUrl())}`;
+    await authApi(path, { body: { email: $('#forgot-email').value.trim() } });
+    setAuthStatus('已寄送密碼重設信；請開啟信件中的連結。');
+  } catch (error) {
+    setAuthStatus(`無法寄送：${error.message}`, true);
+  }
+});
+
+$('#reset-password-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const password = $('#reset-password').value;
+  if (password !== $('#reset-password-confirm').value) {
+    setAuthStatus('兩次輸入的新密碼不一致。', true);
+    return;
+  }
+  if (password.length < 8) {
+    setAuthStatus('新密碼至少需要 8 個字元。', true);
+    return;
+  }
+  setAuthStatus('正在更新密碼…');
+  try {
+    await authApi('user', {
+      method: 'PUT',
+      token: await accessToken(),
+      body: { password },
+    });
+    passwordRecoveryMode = false;
+    setAuthStatus('密碼已更新。');
+    await enterAuthenticatedApp();
+  } catch (error) {
+    setAuthStatus(`密碼更新失敗：${error.message}`, true);
+  }
+});
+
+$('#logout').addEventListener('click', () => signOutAccount());
+$('#view-farm').addEventListener('click', () => selectAppView('farm'));
 $('#connect').addEventListener('click', () => guarded(connect));
 $('#disconnect').addEventListener('click', disconnect);
 $('#view-connect').addEventListener('click', () => selectAppView('connect'));
 $('#view-history').addEventListener('click', () => selectAppView('history'));
+$('#refresh-farms').addEventListener('click', () => guarded(async () => {
+  await fetchFarmData({ autoProvision: false });
+  showStatus('農場與監控桿資料已更新。');
+}));
+$('#farm-list').addEventListener('click', async (event) => {
+  const selectButton = event.target.closest('[data-select-farm]');
+  if (selectButton) chooseFarm(selectButton.dataset.selectFarm);
+  const copyButton = event.target.closest('[data-copy-farm]');
+  if (copyButton) {
+    const code = copyButton.dataset.copyFarm;
+    try {
+      await navigator.clipboard.writeText(code);
+      copyButton.textContent = '已複製';
+      window.setTimeout(() => { copyButton.textContent = '複製農場編號'; }, 1200);
+    } catch (_error) {
+      window.prompt('請複製農場編號', code);
+    }
+  }
+});
+$('#farm-device-rows').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-device-history]');
+  if (!button) return;
+  $('#chart-device-id').value = button.dataset.deviceHistory;
+  localStorage.setItem('rice-chart-device-id', button.dataset.deviceHistory);
+  selectAppView('history');
+  guarded(loadCloudCharts);
+});
+$('#complete-farm-setup').addEventListener('click', () => guarded(async () => {
+  const farmMode = document.querySelector('input[name="onboarding-farm-mode"]:checked')?.value || 'new';
+  const farmName = $('#onboarding-farm-name').value.trim();
+  const farmCode = normalizeFarmCode($('#onboarding-farm-code').value);
+  if (farmMode === 'new' && !farmName) throw new Error('請輸入農場名稱。');
+  if (farmMode === 'join' && !/^RF-[A-Z0-9]{8}$/.test(farmCode)) {
+    throw new Error('農場編號格式應為 RF- 加上 8 位英數字。');
+  }
+  $('#farm-onboarding-status').textContent = '正在設定農場…';
+  await completeRiceProfile({
+    displayName: currentUser?.user_metadata?.display_name || currentUser?.email,
+    farmMode,
+    farmName,
+    farmCode,
+  });
+  await fetchFarmData({ autoProvision: false });
+  $('#farm-onboarding-status').textContent = '農場設定完成。';
+}));
+$('#rename-farm-code').addEventListener('change', () => {
+  const farm = currentFarms.find((item) => item.farm_code === $('#rename-farm-code').value);
+  $('#rename-farm-name').value = farm?.farm_name || '';
+});
+$('#rename-farm').addEventListener('click', () => guarded(async () => {
+  const farmCode = $('#rename-farm-code').value;
+  const farmName = $('#rename-farm-name').value.trim();
+  if (!farmName) throw new Error('農場名稱不可空白。');
+  const config = getSupabaseConfig();
+  await cloudRpc(config.renameFarmRpc, { p_farm_code: farmCode, p_farm_name: farmName });
+  await fetchFarmData({ autoProvision: false });
+}));
+$('#setting-farm-code').addEventListener('change', (event) => chooseFarm(event.target.value));
 $('#capture-calibration').addEventListener('click', () => guarded(captureCalibrationImage));
 $('#calibration-photo-select').addEventListener('change', (event) =>
   guarded(() => renderCalibrationPhotos(event.target.value)));
@@ -1639,9 +2301,11 @@ $('#get-location').addEventListener('click', () => guarded(async () => {
 }));
 $('#save-settings').addEventListener('click', () => guarded(async () => {
   const id = $('#setting-id').value.trim();
+  const farmCode = normalizeFarmCode($('#setting-farm-code').value);
   const interval = Number($('#setting-interval').value);
   const offset = Number($('#setting-offset').value);
   if (!/^[A-Za-z0-9_-]{1,8}$/.test(id)) throw new Error('ID 必須是 1～8 位英數、- 或 _');
+  if (!/^RF-[A-Z0-9]{8}$/.test(farmCode)) throw new Error('請先選擇裝置所屬農場。');
   if (!Number.isInteger(interval) || interval < 1 || interval > 24 ||
       !Number.isInteger(offset) || offset < -500 || offset > 500) {
     throw new Error('設定值超出範圍');
@@ -1681,6 +2345,7 @@ $('#save-settings').addEventListener('click', () => guarded(async () => {
 
   const deviceConfig = {
     deviceId: id,
+    farmCode,
     latitude: location.latitude,
     longitude: location.longitude,
     accuracyM: location.accuracyM,
@@ -1704,6 +2369,7 @@ $('#save-settings').addEventListener('click', () => guarded(async () => {
     showStatus('設定已寫入裝置，GPS 位置已保存在手機；雲端登錄暫未完成，之後會自動重試。', true);
   } else {
     showStatus('設定與手機 GPS 位置已登錄 Supabase；裝置名稱會在下次 BLE 啟動更新。');
+    await fetchFarmData({ autoProvision: false });
   }
 }));
 $('#sync-time').addEventListener('click', () => guarded(() => sendCommand(`SET_TIME,${Math.floor(Date.now() / 1000)}`)));
@@ -1770,7 +2436,6 @@ $('#clear-local').addEventListener('click', () => guarded(async () => {
 document.querySelectorAll('[data-app-version]').forEach((element) => {
   element.textContent = APP_VERSION;
 });
-updateBleRuntime();
 // Beacio may announce that its Safari extension is ready just after page load.
 // The ESP32-CAM GATT connection itself continues to use standard Web Bluetooth.
 window.addEventListener('beacio:ready', updateBleRuntime);
@@ -1779,12 +2444,6 @@ window.addEventListener('resize', () => {
   if (!cloudChartState) return;
   clearTimeout(chartResizeTimer);
   chartResizeTimer = setTimeout(renderCloudCharts, 120);
-});
-Promise.all([renderRecords(), renderCalibrationPhotos()])
-  .then(() => syncAllPendingCloudData())
-  .catch((error) => showStatus(error.message, true));
-initializeCloudCharts().catch((error) => {
-  setChartStatus(cloudDiagnosticMessage(error.message) || error.message, true);
 });
 
 function registerServiceWorker() {
@@ -1805,3 +2464,4 @@ function registerServiceWorker() {
 }
 
 registerServiceWorker();
+startSplash();
