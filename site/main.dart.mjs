@@ -80,7 +80,11 @@ class CompiledApp {
       AF: x0 => x0.tiltY,
       AG: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
       AH: x0 => x0.unlock(),
-      AI: () => globalThis.WeakRef,
+      AI: () => {
+        return typeof process != "undefined" &&
+               Object.prototype.toString.call(process) == "[object process]" &&
+               process.platform == "win32"
+      },
       AJ: x0 => x0.startNotifications(),
       AK: x0 => x0.displayWidth,
       AL: (x0,x1,x2,x3) => x0.removeEventListener(x1,x2,x3),
@@ -93,10 +97,12 @@ class CompiledApp {
       BF: x0 => x0.tiltX,
       BG: x0 => x0.now(),
       BH: (x0,x1) => x0.lock(x1),
-      BI: (o, offsetInBytes, lengthInBytes) => {
-        var dst = new ArrayBuffer(lengthInBytes);
-        new Uint8Array(dst).set(new Uint8Array(o, offsetInBytes, lengthInBytes));
-        return new DataView(dst);
+      BI: () => {
+        // On browsers return `globalThis.location.href`
+        if (globalThis.location != null) {
+          return globalThis.location.href;
+        }
+        return null;
       },
       BJ: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
       BK: x0 => x0.duration,
@@ -111,7 +117,7 @@ class CompiledApp {
       CF: x0 => x0.pointerType,
       CG: x0 => x0.performance,
       CH: x0 => x0.orientation,
-      CI: (a, s, e) => a.slice(s, e),
+      CI: x0 => x0.pop(),
       CJ: x0 => x0.value,
       CK: x0 => x0.image,
       CL: x0 => x0.data,
@@ -129,11 +135,7 @@ class CompiledApp {
       DF: x0 => x0.pointerId,
       DG: (d, digits) => d.toFixed(digits),
       DH: (x0,x1) => x0.querySelector(x1),
-      DI: () => {
-        return typeof process != "undefined" &&
-               Object.prototype.toString.call(process) == "[object process]" &&
-               process.platform == "win32"
-      },
+      DI: () => new AbortController(),
       DJ: x0 => x0.uuid,
       DK: () => globalThis.window.ImageDecoder,
       DL: (x0,x1,x2) => x0.close(x1,x2),
@@ -154,13 +156,7 @@ class CompiledApp {
       EF: x0 => x0.getCoalescedEvents(),
       EG: x0 => x0.maxHeight,
       EH: (x0,x1) => { x0.title = x1 },
-      EI: () => {
-        // On browsers return `globalThis.location.href`
-        if (globalThis.location != null) {
-          return globalThis.location.href;
-        }
-        return null;
-      },
+      EI: (x0,x1,x2,x3,x4,x5) => ({method: x0,headers: x1,body: x2,credentials: x3,redirect: x4,signal: x5}),
       EJ: x0 => x0.uuid,
       EK: (x0,x1) => x0.getRandomValues(x1),
       EL: (x0,x1) => x0.close(x1),
@@ -173,7 +169,7 @@ class CompiledApp {
       FF: (x0,x1) => x0.getModifierState(x1),
       FG: x0 => x0.maxWidth,
       FH: (x0,x1) => x0.vibrate(x1),
-      FI: x0 => x0.pop(),
+      FI: (x0,x1) => globalThis.fetch(x0,x1),
       FJ: x0 => x0.device,
       FK: () => globalThis.crypto,
       FL: x0 => x0.close(),
@@ -191,7 +187,7 @@ class CompiledApp {
       GF: s => s.trimLeft(),
       GG: x0 => x0.minHeight,
       GH: x0 => x0.arrayBuffer(),
-      GI: () => new AbortController(),
+      GI: (x0,x1) => x0.get(x1),
       GJ: x0 => x0.service,
       GK: l => new DataView(new ArrayBuffer(l)),
       GL: (x0,x1) => x0.send(x1),
@@ -212,7 +208,7 @@ class CompiledApp {
         }
         return 3;
       },
-      HI: (x0,x1,x2,x3,x4,x5) => ({method: x0,headers: x1,body: x2,credentials: x3,redirect: x4,signal: x5}),
+      HI: (wasmFunction,f) => finalizeWrapper(f, function(x0,x1,x2) { return wasmFunction(f,arguments.length,x0,x1,x2) }),
       HJ: x0 => x0.target,
       HK: (x0,x1,x2) => x0.open(x1,x2),
       HL: x0 => x0.readyState,
@@ -230,7 +226,7 @@ class CompiledApp {
       IF: (x0,x1) => x0[x1],
       IG: (x0,x1) => x0.removeProperty(x1),
       IH: x0 => x0.status,
-      II: (x0,x1) => globalThis.fetch(x0,x1),
+      II: (x0,x1) => x0.forEach(x1),
       IJ: x0 => x0.getPrimaryServices(),
       IK: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
       IL: (x0,x1) => { x0.binaryType = x1 },
@@ -270,7 +266,7 @@ class CompiledApp {
       JF: x0 => x0.length,
       JG: (x0,x1) => x0.add(x1),
       JH: (x0,x1) => x0.fetch(x1),
-      JI: (x0,x1) => x0.get(x1),
+      JI: x0 => x0.name,
       JJ: x0 => x0.getCharacteristics(),
       JK: (x0,x1) => x0.contains(x1),
       JL: x0 => new BroadcastChannel(x0),
@@ -289,7 +285,7 @@ class CompiledApp {
       KF: (x0,x1) => x0.exec(x1),
       KG: x0 => x0.data,
       KH: x0 => x0.content,
-      KI: (wasmFunction,f) => finalizeWrapper(f, function(x0,x1,x2) { return wasmFunction(f,arguments.length,x0,x1,x2) }),
+      KI: x0 => x0.statusText,
       KJ: x0 => x0.getDescriptors(),
       KK: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
       KL: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
@@ -302,7 +298,7 @@ class CompiledApp {
       LF: x0 => x0.index,
       LG: (x0,x1) => { x0.scrollTop = x1 },
       LH: x0 => x0.document,
-      LI: (x0,x1) => x0.forEach(x1),
+      LI: x0 => x0.url,
       LJ: x0 => x0.authenticatedSignedWrites,
       LK: (x0,x1) => x0.getAll(x1),
       LL: x0 => x0.close(),
@@ -315,7 +311,7 @@ class CompiledApp {
       MF: x0 => x0.flags,
       MG: (x0,x1,x2) => x0.setSelectionRange(x1,x2),
       MH: () => typeof dartUseDateNowForTicks !== "undefined",
-      MI: x0 => x0.name,
+      MI: x0 => x0.status,
       MJ: x0 => x0.indicate,
       MK: x0 => x0.value,
       ML: (x0,x1) => x0.postMessage(x1),
@@ -329,7 +325,7 @@ class CompiledApp {
       NF: (a, s) => a.join(s),
       NG: (x0,x1) => { x0.value = x1 },
       NH: () => Date.now(),
-      NI: x0 => x0.statusText,
+      NI: x0 => x0.getReader(),
       NJ: x0 => x0.notify,
       NK: x0 => x0.openCursor(),
       NL: (x0,x1) => { x0.onmessage = x1 },
@@ -346,7 +342,7 @@ class CompiledApp {
       OF: (x0,x1) => x0.error(x1),
       OG: (x0,x1,x2) => x0.setSelectionRange(x1,x2),
       OH: () => 1000 * performance.now(),
-      OI: x0 => x0.url,
+      OI: x0 => x0.read(),
       OJ: x0 => x0.write,
       OK: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
       OL: (x0,x1,x2) => x0.insertBefore(x1,x2),
@@ -359,7 +355,7 @@ class CompiledApp {
       PF: () => globalThis.console,
       PG: (x0,x1) => { x0.value = x1 },
       PH: x0 => new Uint8Array(x0),
-      PI: x0 => x0.status,
+      PI: x0 => x0.value,
       PJ: x0 => x0.writeWithoutResponse,
       PK: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
       PL: x0 => x0.id,
@@ -377,7 +373,7 @@ class CompiledApp {
         return s;
       },
       QH: (x0,x1,x2) => x0.slice(x1,x2),
-      QI: x0 => x0.getReader(),
+      QI: x0 => x0.done,
       QJ: x0 => x0.read,
       QK: (x0,x1) => { x0.onerror = x1 },
       QL: x0 => x0.offsetHeight,
@@ -390,7 +386,7 @@ class CompiledApp {
       RF: x0 => x0.blur(),
       RG: x0 => x0.value,
       RH: (x0,x1) => x0.decode(x1),
-      RI: x0 => x0.read(),
+      RI: x0 => x0.cancel(),
       RJ: x0 => x0.broadcast,
       RK: x0 => x0.error,
       RL: x0 => x0.offsetWidth,
@@ -408,7 +404,7 @@ class CompiledApp {
       SF: x0 => x0.button,
       SG: x0 => x0.selectionDirection,
       SH: (x0,x1) => x0.adoptText(x1),
-      SI: x0 => x0.value,
+      SI: x0 => x0.body,
       SJ: x0 => x0.properties,
       SK: (x0,x1) => { x0.onsuccess = x1 },
       SL: x0 => x0.stopPropagation(),
@@ -421,7 +417,7 @@ class CompiledApp {
       TF: x0 => x0.innerHeight,
       TG: x0 => x0.selectionStart,
       TH: x0 => x0.first(),
-      TI: x0 => x0.done,
+      TI: x0 => x0.headers,
       TJ: x0 => x0.uuid,
       TK: x0 => x0.continue(),
       TL: x0 => x0.disabled,
@@ -434,7 +430,7 @@ class CompiledApp {
       UF: x0 => x0.innerWidth,
       UG: x0 => x0.selectionEnd,
       UH: x0 => x0.next(),
-      UI: x0 => x0.cancel(),
+      UI: x0 => x0.signal,
       UJ: x0 => ({services: x0}),
       UK: x0 => x0.result,
       UL: (x0,x1) => { x0.min = x1 },
@@ -455,7 +451,7 @@ class CompiledApp {
       VF: x0 => x0.height,
       VG: x0 => x0.value,
       VH: x0 => x0.current(),
-      VI: x0 => x0.body,
+      VI: x0 => x0.abort(),
       VJ: x0 => ({name: x0}),
       VK: (x0,x1,x2) => x0.transaction(x1,x2),
       VL: (x0,x1) => { x0.max = x1 },
@@ -468,7 +464,7 @@ class CompiledApp {
       WF: x0 => x0.width,
       WG: x0 => x0.selectionDirection,
       WH: (x0,x1) => new Intl.v8BreakIterator(x0,x1),
-      WI: x0 => x0.headers,
+      WI: (map, o, v) => map.set(o, v),
       WJ: x0 => ({manufacturerData: x0}),
       WK: (x0,x1) => x0.objectStore(x1),
       WL: (x0,x1) => { x0.disabled = x1 },
@@ -481,7 +477,11 @@ class CompiledApp {
       XF: x0 => x0.clientHeight,
       XG: x0 => x0.selectionStart,
       XH: x0 => x0.v8BreakIterator,
-      XI: x0 => x0.signal,
+      XI: (o, offsetInBytes, lengthInBytes) => {
+        var dst = new ArrayBuffer(lengthInBytes);
+        new Uint8Array(dst).set(new Uint8Array(o, offsetInBytes, lengthInBytes));
+        return new DataView(dst);
+      },
       XJ: x0 => ({serviceData: x0}),
       XK: (x0,x1) => x0.getAllKeys(x1),
       XL: (x0,x1) => { x0.scrollLeft = x1 },
@@ -494,7 +494,7 @@ class CompiledApp {
       YF: x0 => x0.clientWidth,
       YG: x0 => x0.selectionEnd,
       YH: () => globalThis.Intl,
-      YI: x0 => x0.abort(),
+      YI: (a, s, e) => a.slice(s, e),
       YJ: (x0,x1) => ({filters: x0,optionalServices: x1}),
       YK: x0 => x0.key,
       YL: (x0,x1) => { x0.spellcheck = x1 },
@@ -713,7 +713,7 @@ class CompiledApp {
       nE: x0 => x0.unicode,
       nF: x0 => x0.search,
       nG: (x0,x1) => { x0.noValidate = x1 },
-      nH: (a, i) => a.splice(i, 1),
+      nH: x0 => x0.debugSkipFontRetryDelay,
       nI: x0 => x0.getAvailability(),
       nJ: (x0,x1,x2,x3,x4) => ({type: x0,data: x1,premultiplyAlpha: x2,colorSpaceConversion: x3,preferAnimation: x4}),
       nK: x0 => x0.localStorage,
@@ -725,7 +725,7 @@ class CompiledApp {
       oE: x0 => x0.ignoreCase,
       oF: x0 => x0.location,
       oG: (x0,x1) => x0.removeAttribute(x1),
-      oH: a => a.pop(),
+      oH: (x0,x1,x2) => x0.set(x1,x2),
       oI: x0 => x0.bluetooth,
       oJ: x0 => new window.ImageDecoder(x0),
       oK: (x0,x1,x2,x3) => x0.replaceState(x1,x2,x3),
@@ -737,7 +737,7 @@ class CompiledApp {
       pE: x0 => x0.multiline,
       pF: x0 => x0.pathname,
       pG: x0 => x0.isConnected,
-      pH: (map, o, v) => map.set(o, v),
+      pH: x0 => x0.fontFallbackBaseUrl,
       pI: x0 => x0.navigator,
       pJ: x0 => x0.name,
       pK: x0 => x0.history,
@@ -749,7 +749,7 @@ class CompiledApp {
       qE: (o, p, r) => o.replaceAll(p, () => r),
       qF: (x0,x1,x2,x3) => x0.replaceState(x1,x2,x3),
       qG: x0 => x0.click(),
-      qH: (map, o) => map.get(o),
+      qH: (handle) => clearInterval(handle),
       qI: () => globalThis.window,
       qJ: x0 => x0.repetitionCount,
       qK: x0 => x0.href,
@@ -768,7 +768,8 @@ class CompiledApp {
         return proto === Object.prototype || proto === null;
       },
       rG: (x0,x1) => x0.getElementsByClassName(x1),
-      rH: () => new WeakMap(),
+      rH: (ms, c) =>
+      setInterval(() => dartInstance.exports.$invokeCallback(c), ms),
       rI: x0 => x0.disconnect(),
       rJ: x0 => x0.frameCount,
       rK: x0 => x0.location,
@@ -789,7 +790,7 @@ class CompiledApp {
           setValue(wasmArray, wasmArrayOffset + i, jsArray[jsArrayOffset + i]);
         }
       },
-      sH: x0 => x0.debugSkipFontRetryDelay,
+      sH: () => Date.now(),
       sI: x0 => x0.id,
       sJ: x0 => x0.selectedTrack,
       sK: (x0,x1) => x0.removeItem(x1),
@@ -806,7 +807,7 @@ class CompiledApp {
           setValue(wasmArray, wasmArrayOffset + i, jsArray[jsArrayOffset + i]);
         }
       },
-      tH: (x0,x1,x2) => x0.set(x1,x2),
+      tH: (map, o) => map.get(o),
       tI: x0 => x0.gatt,
       tJ: x0 => x0.completed,
       tK: (x0,x1,x2) => x0.setItem(x1,x2),
@@ -818,7 +819,7 @@ class CompiledApp {
       uE: x0 => x0.wheelDeltaY,
       uF: x0 => x0.hash,
       uG: (x0,x1) => x0.dispatchEvent(x1),
-      uH: x0 => x0.fontFallbackBaseUrl,
+      uH: () => new WeakMap(),
       uI: x0 => x0.connect(),
       uJ: x0 => x0.ready,
       uK: () => new Array(),
@@ -830,7 +831,7 @@ class CompiledApp {
       vE: x0 => x0.wheelDeltaX,
       vF: x0 => x0.state,
       vG: (x0,x1) => x0.createEvent(x1),
-      vH: (handle) => clearInterval(handle),
+      vH: x0 => new WeakRef(x0),
       vI: (x0,x1) => x0.writeValueWithResponse(x1),
       vJ: x0 => x0.tracks,
       vK: (x0,x1) => new WebSocket(x0,x1),
@@ -842,8 +843,7 @@ class CompiledApp {
       wE: x0 => x0.key,
       wF: (x0,x1) => x0.go(x1),
       wG: (x0,x1,x2,x3) => x0.initEvent(x1,x2,x3),
-      wH: (ms, c) =>
-      setInterval(() => dartInstance.exports.$invokeCallback(c), ms),
+      wH: x0 => x0.deref(),
       wI: (x0,x1) => x0.writeValueWithoutResponse(x1),
       wJ: x0 => x0.close(),
       wK: x0 => x0.reason,
@@ -860,7 +860,7 @@ class CompiledApp {
       xE: x0 => x0.identifier,
       xF: x0 => x0.parentElement,
       xG: x0 => x0.readText(),
-      xH: () => Date.now(),
+      xH: () => globalThis.WeakRef,
       xI: x0 => x0.readValue(),
       xJ: (x0,x1) => ({frameIndex: x0,completeFramesOnly: x1}),
       xK: x0 => x0.code,
@@ -872,7 +872,7 @@ class CompiledApp {
       yE: x0 => x0.touches,
       yF: (x0,x1) => x0.querySelectorAll(x1),
       yG: x0 => x0.clipboard,
-      yH: x0 => new WeakRef(x0),
+      yH: (a, i) => a.splice(i, 1),
       yI: o => {
         if (o === null || o === undefined) return 0;
         if (o instanceof DataView) return 1;
@@ -888,7 +888,7 @@ class CompiledApp {
       zE: x0 => x0.pressure,
       zF: (x0,x1) => x0.requestAnimationFrame(x1),
       zG: (x0,x1) => x0.writeText(x1),
-      zH: x0 => x0.deref(),
+      zH: a => a.pop(),
       zI: (x0,x1,x2) => x0.addEventListener(x1,x2),
       zJ: x0 => x0.displayHeight,
       zK: (wasmFunction,f) => finalizeWrapper(f, function(x0) { return wasmFunction(f,arguments.length,x0) }),
