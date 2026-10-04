@@ -832,7 +832,7 @@ class CompiledApp {
       vF: x0 => x0.state,
       vG: (x0,x1) => x0.createEvent(x1),
       vH: x0 => new WeakRef(x0),
-      vI: (x0,x1) => x0.writeValueWithResponse(x1),
+      vI: x0 => x0.readValue(),
       vJ: x0 => x0.tracks,
       vK: (x0,x1) => new WebSocket(x0,x1),
       vL: x0 => x0.navigator,
@@ -844,7 +844,11 @@ class CompiledApp {
       wF: (x0,x1) => x0.go(x1),
       wG: (x0,x1,x2,x3) => x0.initEvent(x1,x2,x3),
       wH: x0 => x0.deref(),
-      wI: (x0,x1) => x0.writeValueWithoutResponse(x1),
+      wI: o => {
+        if (o === null || o === undefined) return 0;
+        if (o instanceof DataView) return 1;
+        return 2;
+      },
       wJ: x0 => x0.close(),
       wK: x0 => x0.reason,
       wL: (x0,x1,x2,x3) => x0.open(x1,x2,x3),
@@ -861,7 +865,7 @@ class CompiledApp {
       xF: x0 => x0.parentElement,
       xG: x0 => x0.readText(),
       xH: () => globalThis.WeakRef,
-      xI: x0 => x0.readValue(),
+      xI: (x0,x1) => x0.writeValueWithResponse(x1),
       xJ: (x0,x1) => ({frameIndex: x0,completeFramesOnly: x1}),
       xK: x0 => x0.code,
       xL: (x0,x1) => x0.key(x1),
@@ -873,11 +877,7 @@ class CompiledApp {
       yF: (x0,x1) => x0.querySelectorAll(x1),
       yG: x0 => x0.clipboard,
       yH: (a, i) => a.splice(i, 1),
-      yI: o => {
-        if (o === null || o === undefined) return 0;
-        if (o instanceof DataView) return 1;
-        return 2;
-      },
+      yI: (x0,x1) => x0.writeValueWithoutResponse(x1),
       yJ: (x0,x1) => x0.decode(x1),
       yK: (x0,x1,x2,x3) => x0.addEventListener(x1,x2,x3),
       yL: x0 => x0.length,

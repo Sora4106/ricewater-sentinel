@@ -38,10 +38,10 @@ addEventListener("message", eventListener);
 if (!window._flutter) {
   window._flutter = {};
 }
-_flutter.buildConfig = {"engineRevision":"5d531788691ec3404cac0cee66ead4007b177363","wasmHashes":{"canvaskit.wasm":"2898c0795cf4a694e86ee3445c7414c2503fbcb46967154762f50ebde988da04","chromium/canvaskit.wasm":"ba4024133403777f41c709b9e76e9f4bdb76c73d33adba8645527a59d815d824","skwasm.wasm":"a957befea55cf597eeebcf3286f1b88f463f3ad8bfc13e55aa8f5d34cd2ade4d","skwasm_heavy.wasm":"781a14fc7e9cd387ee6df4a056f62af7e940c60cc42ce04571cc2e810042c588","webparagraph/canvaskit.wasm":"7a61c4ad71781875a80bbfc5ee6e49686dd190d629e0fe986d3ecc05ada58856","wimp.wasm":"7474f6074c42c4be503c9059c9b5058e468a68a8917ac6c3607f0da4922f7e5a","main.dart.wasm":"e35fb1478d169383ac773d012fe37c1f18c4f689529b01d5b00e9c8386ba9abb"},"builds":[{"compileTarget":"dart2wasm","renderer":"skwasm","mainWasmPath":"main.dart.wasm","jsSupportRuntimePath":"main.dart.mjs"},{"compileTarget":"dart2js","renderer":"canvaskit","mainJsPath":"main.dart.js"}]};
+_flutter.buildConfig = {"engineRevision":"5d531788691ec3404cac0cee66ead4007b177363","wasmHashes":{"canvaskit.wasm":"2898c0795cf4a694e86ee3445c7414c2503fbcb46967154762f50ebde988da04","chromium/canvaskit.wasm":"ba4024133403777f41c709b9e76e9f4bdb76c73d33adba8645527a59d815d824","skwasm.wasm":"a957befea55cf597eeebcf3286f1b88f463f3ad8bfc13e55aa8f5d34cd2ade4d","skwasm_heavy.wasm":"781a14fc7e9cd387ee6df4a056f62af7e940c60cc42ce04571cc2e810042c588","webparagraph/canvaskit.wasm":"7a61c4ad71781875a80bbfc5ee6e49686dd190d629e0fe986d3ecc05ada58856","wimp.wasm":"7474f6074c42c4be503c9059c9b5058e468a68a8917ac6c3607f0da4922f7e5a","main.dart.wasm":"578352c6e77097db493664941c9e860ae1bc075f841ae51ed69e840d84b44a86"},"builds":[{"compileTarget":"dart2wasm","renderer":"skwasm","mainWasmPath":"main.dart.wasm","jsSupportRuntimePath":"main.dart.mjs"},{"compileTarget":"dart2js","renderer":"canvaskit","mainJsPath":"main.dart.js"}]};
 
 
-const ricewaterEmbeddedVersion = '0.11.0+8';
+const ricewaterEmbeddedVersion = '0.11.0+10';
 let ricewaterVersionCheck = null;
 
 function setBootstrapStatus(message) {
