@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '0.11.0+6';
+const VERSION = '0.11.0+8';
 const CACHE = `ricewater-sentinel-${VERSION}`;
 const CORE = [
   './',
@@ -70,6 +70,13 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => caches.match('index.html')),
+    );
+    return;
+  }
+
+  if (url.pathname.endsWith('/version.json')) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('version.json')),
     );
     return;
   }

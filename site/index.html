@@ -103,7 +103,11 @@
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         // A first-time install already has the newest page and should not flash
         // through an unnecessary reload. Existing PWA clients reload once.
-        if (!hadServiceWorkerController || reloading) return;
+        if (
+          !hadServiceWorkerController ||
+          reloading ||
+          window.ricewaterUpdateReloading
+        ) return;
         reloading = true;
         location.reload();
       });
@@ -117,6 +121,12 @@
       };
       addEventListener('ricewater-ready', registerPwaUpdate, { once: true });
       setTimeout(registerPwaUpdate, 60000);
+      const checkLatestVersion = () => window.ricewaterCheckForUpdate?.();
+      addEventListener('focus', checkLatestVersion);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkLatestVersion();
+      });
+      setInterval(checkLatestVersion, 15 * 60 * 1000);
     }
   </script>
 </body>
