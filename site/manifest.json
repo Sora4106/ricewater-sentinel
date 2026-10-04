@@ -1,0 +1,35 @@
+{
+    "name": "水稻田監控系統",
+    "short_name": "水稻田監控",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#f7f3e7",
+    "theme_color": "#0d6048",
+    "description": "水稻田水位監控、藍牙下載與雲端歷史資訊系統",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
