@@ -29172,7 +29172,7 @@ if(j==null)j=new A.bj(Date.now(),0,!1)
 i=a.h(0,"firmwareVersion")
 i=A.k(i==null?"UNKNOWN":i)
 h=a.h(0,"appVersion")
-h=A.k(h==null?"0.11.0+13":h)
+h=A.k(h==null?"0.11.0+14":h)
 g=a.h(0,"cloudStatus")
 g=A.k(g==null?"pending":g)
 f=A.bM(a.h(0,"cloudError"))
@@ -29202,7 +29202,7 @@ j=a.h(0,"installedAt")
 j=A.m9(A.k(j==null?"":j))
 if(j==null)j=new A.bj(Date.now(),0,!1)
 i=a.h(0,"appVersion")
-i=A.k(i==null?"0.11.0+13":i)
+i=A.k(i==null?"0.11.0+14":i)
 h=a.h(0,"cloudStatus")
 return new A.jy(g,s,r,q,p,o,n,m,l,k,j,i,A.k(h==null?"pending":h),A.bM(a.h(0,"cloudError")),A.bM(a.h(0,"accountUserId")))},
 a6G(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p){return new A.fl(i,e,c,o,p,h,g,n,d,m,l,j,k,b,f,a)},
@@ -99418,7 +99418,7 @@ a1=a.x
 n=k==null?null:k.z
 if(n==null)n=new A.bj(Date.now(),0,!1)
 s=9
-return A.j(q.b.zf(p,new A.jy(c,a0,g,f,e,d,a3,a4,a2,a1,n,"0.11.0+13","synced",null,p)),$async$kf)
+return A.j(q.b.zf(p,new A.jy(c,a0,g,f,e,d,a3,a4,a2,a1,n,"0.11.0+14","synced",null,p)),$async$kf)
 case 9:s=10
 return A.j(q.Fk(),$async$kf)
 case 10:q.w="\u88dd\u7f6e "+c+" \u5df2\u7531 Supabase \u5efa\u7acb\uff0c\u8a2d\u5b9a\u8207\u624b\u6a5f\u6642\u9593\u5df2\u5beb\u5165\u6676\u7247\u3002"
@@ -99675,7 +99675,7 @@ o=Date.now()
 k=k.ch
 k=k==null?null:k.x
 if(k==null)k="FLUTTER-TEST"
-l=A.aiH(p,"0.11.0+13",null,"pending",null,0,m,new A.bj(o,0,!1),B.e.ca(o,1000),k,0,65535,100,o,-32768,-32768,-32768)
+l=A.aiH(p,"0.11.0+14",null,"pending",null,0,m,new A.bj(o,0,!1),B.e.ca(o,1000),k,0,65535,100,o,-32768,-32768,-32768)
 o=t.yE
 s=2
 return A.j(q.b.uQ(p,A.b([l],o)),$async$yN)
@@ -100232,7 +100232,7 @@ A.ayW.prototype={
 $1(a){if(a==="logout")this.a.c.v3()},
 $S:67}
 A.ayV.prototype={
-$1(a){var s=null,r=t.N,q=A.aQj(new A.Il("\u7cfb\u7d71\u7248\u672c","0.11.0+13",s),!1,r),p=this.a.c.a.a.gct().e.a
+$1(a){var s=null,r=t.N,q=A.aQj(new A.Il("\u7cfb\u7d71\u7248\u672c","0.11.0+14",s),!1,r),p=this.a.c.a.a.gct().e.a
 p=p==null?s:p.r
 p=p==null?s:p.z
 return A.b([q,A.aQj(new A.Il("\u767b\u5165\u5e33\u865f",p==null?"\u2014":p,s),!1,r),B.RT,B.RU],t.Do)},
@@ -101124,7 +101124,7 @@ if(q.ch)o.push(B.R5)
 s=q.CW
 if(s.length!==0)o.push(new A.bg(B.oY,A.aO(s,p,p,p,A.he(p,p,q.cx?A.R(a).ax.fy:A.R(a).ax.b,p,p,p,p,p,p,p,p,p,p,p,p,p,p,!0,p,p,p,p,p,p,p,p),p,p),p))
 o.push(B.h1)
-o.push(A.aO("\u7cfb\u7d71\u7248\u672c 0.11.0+13",p,p,p,A.R(a).ok.Q,B.eG,p))
+o.push(A.aO("\u7cfb\u7d71\u7248\u672c 0.11.0+14",p,p,p,A.R(a).ok.Q,B.eG,p))
 return A.anc(A.h_(B.a6,A.xD(new A.f_(B.Do,A.fY(new A.bg(B.p_,A.cm(o,B.ax,B.x,B.D),p)),p),p,B.ae),B.C,p,B.Dv,p,p,p,B.ky,p,p,p))},
 In(a,b,c,d){var s=null
 return new A.bg(B.I1,A.xV(b,A.aJy(s,s,s,s,s,s,s,s,!0,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,a,!0,!0,!1,s,s,s,s,s,s,s,s,s,s,s,s,s,s),c,d,!1),s)},
@@ -101565,7 +101565,7 @@ h=o.getInt16(12,!0)
 g=o.getUint16(14,!0)
 f=q[16]
 e=q[17]
-r.push(A.aiH(b,"0.11.0+13",b,"pending",b,n,p,new A.bj(Date.now(),0,!1),k,m,e,g,f,l,j,h,i))
+r.push(A.aiH(b,"0.11.0+14",b,"pending",b,n,p,new A.bj(Date.now(),0,!1),k,m,e,g,f,l,j,h,i))
 p=c.at
 c.k3=p>0?r.length/p:0
 c.CW="\u63a5\u6536 "+r.length+" / "+p+" \u7b46"}catch(d){s=A.X(d)
@@ -101793,7 +101793,7 @@ l=t.z
 k=A
 j=t.f
 s=3
-return A.j(p.a.uh("allocate_rice_device_for_farm",A.a2(["p_farm_code",d,"p_hardware_uid",f,"p_current_device_id",n,"p_latitude",h,"p_longitude",a0,"p_accuracy_m",a,"p_location_recorded_at",i.yT().hI(),"p_interval_hours",g,"p_water_offset_mm",a1,"p_climate_enabled",b,"p_firmware_version",e,"p_app_version","0.11.0+13"],m,l),l),$async$Cl)
+return A.j(p.a.uh("allocate_rice_device_for_farm",A.a2(["p_farm_code",d,"p_hardware_uid",f,"p_current_device_id",n,"p_latitude",h,"p_longitude",a0,"p_accuracy_m",a,"p_location_recorded_at",i.yT().hI(),"p_interval_hours",g,"p_water_offset_mm",a1,"p_climate_enabled",b,"p_firmware_version",e,"p_app_version","0.11.0+14"],m,l),l),$async$Cl)
 case 3:l=k.mC(j.a(a3),m,l).h(0,"device_id")
 o=A.k(l==null?"":l)
 n=A.cj("^RW[0-9]{6}$",!0,!1)
@@ -110195,7 +110195,7 @@ B.WC=new A.v(!0,B.f3,null,null,null,null,12,null,null,null,null,null,null,null,n
 B.a0H=new A.ay("\u6e2c\u8a66\u8cc7\u6599\u53ea\u5132\u5b58\u5728\u76ee\u524d\u624b\u6a5f\uff0c\u4e0d\u6703\u4e0a\u50b3 Supabase\uff1b\u5efa\u7acb\u5f8c\u6703\u81ea\u52d5\u986f\u793a\u6708\u5716\u8868\u3002",null,B.WC,null,null,null,null,null,null)
 B.a0I=new A.ay("\u5c1a\u7121\u8cc7\u6599",null,null,null,null,null,null,null,null)
 B.YO=new A.v(!0,B.cu,null,null,null,null,null,B.as,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.BU=new A.ay("\u7cfb\u7d71\u7248\u672c 0.11.0+13",null,B.YO,null,null,null,null,null,null)
+B.BU=new A.ay("\u7cfb\u7d71\u7248\u672c 0.11.0+14",null,B.YO,null,null,null,null,null,null)
 B.a0J=new A.ay("\u91cd\u65b0\u5b78\u7fd2\u5c3a\u898f\u4f4d\u7f6e\uff1f",null,null,null,null,null,null,null,null)
 B.a4A=new A.as_(0,"system")
 B.Qz=new A.i(0.056,0.024)
