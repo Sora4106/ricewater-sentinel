@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '0.11.0+31';
+const VERSION = '0.11.0+32';
 const CACHE = `ricewater-sentinel-${VERSION}`;
 const CORE = [
   './',
