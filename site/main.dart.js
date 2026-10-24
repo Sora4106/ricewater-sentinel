@@ -29201,7 +29201,7 @@ if(j==null)j=new A.bd(Date.now(),0,!1)
 i=a.h(0,"firmwareVersion")
 i=A.k(i==null?"UNKNOWN":i)
 h=a.h(0,"appVersion")
-h=A.k(h==null?"0.11.0+27":h)
+h=A.k(h==null?"0.11.0+28":h)
 g=a.h(0,"cloudStatus")
 g=A.k(g==null?"pending":g)
 f=A.bN(a.h(0,"cloudError"))
@@ -29231,7 +29231,7 @@ j=a.h(0,"installedAt")
 j=A.kT(A.k(j==null?"":j))
 if(j==null)j=new A.bd(Date.now(),0,!1)
 i=a.h(0,"appVersion")
-i=A.k(i==null?"0.11.0+27":i)
+i=A.k(i==null?"0.11.0+28":i)
 h=a.h(0,"cloudStatus")
 return new A.jC(g,s,r,q,p,o,n,m,l,k,j,i,A.k(h==null?"pending":h),A.bN(a.h(0,"cloudError")),A.bN(a.h(0,"accountUserId")))},
 aU8(a){var s
@@ -99644,7 +99644,7 @@ a1=c.aZ()
 a2=q.CW
 n=a.x
 m=k==null?null:k.z
-a0=new A.jC(a1,a2,g,f,e,d,a5,a6,a4,n,m==null?new A.bd(Date.now(),0,!1):m,"0.11.0+27","synced",null,p)
+a0=new A.jC(a1,a2,g,f,e,d,a5,a6,a4,n,m==null?new A.bd(Date.now(),0,!1):m,"0.11.0+28","synced",null,p)
 s=15
 return A.i(q.b.zo(p,a0),$async$iA)
 case 15:s=!l?16:17
@@ -100001,7 +100001,7 @@ o=Date.now()
 k=k.CW
 k=k==null?null:k.x
 if(k==null)k="FLUTTER-TEST"
-l=A.aiV(p,"0.11.0+27",null,"pending",null,0,m,new A.bd(o,0,!1),B.e.cb(o,1000),k,0,65535,100,o,-32768,-32768,-32768)
+l=A.aiV(p,"0.11.0+28",null,"pending",null,0,m,new A.bd(o,0,!1),B.e.cb(o,1000),k,0,65535,100,o,-32768,-32768,-32768)
 o=t.yE
 s=2
 return A.i(q.b.uU(p,A.b([l],o)),$async$yV)
@@ -100679,7 +100679,7 @@ A.azQ.prototype={
 $1(a){if(a==="logout")this.a.c.v8()},
 $S:69}
 A.azP.prototype={
-$1(a){var s=null,r=t.N,q=A.aRf(new A.IA("\u7cfb\u7d71\u7248\u672c","0.11.0+27",s),!1,r),p=this.a.c.a.a.gcv().e.a
+$1(a){var s=null,r=t.N,q=A.aRf(new A.IA("\u7cfb\u7d71\u7248\u672c","0.11.0+28",s),!1,r),p=this.a.c.a.a.gcv().e.a
 p=p==null?s:p.r
 p=p==null?s:p.z
 return A.b([q,A.aRf(new A.IA("\u767b\u5165\u5e33\u865f",p==null?"\u2014":p,s),!1,r),B.SA,B.SB],t.Do)},
@@ -101753,7 +101753,7 @@ if(q.ch)o.push(B.RN)
 s=q.CW
 if(s.length!==0)o.push(new A.bb(B.p8,A.aH(s,p,p,p,A.fP(p,p,q.cx?A.R(a).ax.fy:A.R(a).ax.b,p,p,p,p,p,p,p,p,p,p,p,p,p,p,!0,p,p,p,p,p,p,p,p),p,p),p))
 o.push(B.h4)
-o.push(A.aH("\u7cfb\u7d71\u7248\u672c 0.11.0+27",p,p,p,A.R(a).ok.Q,B.dO,p))
+o.push(A.aH("\u7cfb\u7d71\u7248\u672c 0.11.0+28",p,p,p,A.R(a).ok.Q,B.dO,p))
 return A.anr(A.fI(B.a3,A.pm(new A.eK(B.DD,A.hs(new A.bb(B.pb,A.ci(o,B.ay,B.r,B.C),p)),p),p,B.a7),B.A,p,B.DL,p,p,p,B.kF,p,p,p))},
 Iw(a,b,c,d){var s=null
 return new A.bb(B.Im,A.y1(b,A.aKv(s,s,s,s,s,s,s,s,!0,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,a,!0,!0,!1,s,s,s,s,s,s,s,s,s,s,s,s,s,s),c,d,!1),s)},
@@ -102226,7 +102226,7 @@ h=o.getInt16(12,!0)
 g=o.getUint16(14,!0)
 f=q[16]
 e=q[17]
-r.push(A.aiV(b,"0.11.0+27",b,"pending",b,n,p,new A.bd(Date.now(),0,!1),k,m,e,g,f,l,j,h,i))
+r.push(A.aiV(b,"0.11.0+28",b,"pending",b,n,p,new A.bd(Date.now(),0,!1),k,m,e,g,f,l,j,h,i))
 p=c.ax
 c.k4=p>0?r.length/p:0
 c.cx="\u63a5\u6536 "+r.length+" / "+p+" \u7b46"}catch(d){s=A.Y(d)
@@ -102483,7 +102483,7 @@ l=t.z
 k=A
 j=t.f
 s=3
-return A.i(p.a.ul("allocate_rice_device_for_farm",A.a2(["p_farm_code",d,"p_hardware_uid",f,"p_current_device_id",n,"p_latitude",h,"p_longitude",a0,"p_accuracy_m",a,"p_location_recorded_at",i.z1().hi(),"p_interval_hours",g,"p_water_offset_mm",a1,"p_climate_enabled",b,"p_firmware_version",e,"p_app_version","0.11.0+27"],m,l),l),$async$Cv)
+return A.i(p.a.ul("allocate_rice_device_for_farm",A.a2(["p_farm_code",d,"p_hardware_uid",f,"p_current_device_id",n,"p_latitude",h,"p_longitude",a0,"p_accuracy_m",a,"p_location_recorded_at",i.z1().hi(),"p_interval_hours",g,"p_water_offset_mm",a1,"p_climate_enabled",b,"p_firmware_version",e,"p_app_version","0.11.0+28"],m,l),l),$async$Cv)
 case 3:l=k.mF(j.a(a3),m,l).h(0,"device_id")
 o=A.k(l==null?"":l)
 n=A.ck("^RW[0-9]{6}$",!0,!1)
@@ -102962,7 +102962,7 @@ r=l/n
 q.anI(a,b,s,r)
 q.anM(a,b,s,r)
 p=p.r
-if((p&64)!==0)q.pp(a,"\u2191 \u65cb\u8f49\u5f8c\u756b\u9762\u9802\u7aef",B.R9,B.GU)
+if((p&64)!==0)q.pp(a,"\u2191",B.R9,B.GU)
 if((p&128)!==0)q.pp(a,"\u76ee\u524d\u6aa2\u6e2c\u5230\u7684\u5716\u50cf\u65b9\u5411\u932f\u8aa4",new A.h(8,l-34),B.FP)
 q.anN(a,b,s,r)},
 anI(a3,a4,a5,a6){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0=this,a1=a0.c,a2=a1.z
@@ -111130,7 +111130,7 @@ B.a1A=new A.ao("\u6e2c\u8a66\u8cc7\u6599\u53ea\u5132\u5b58\u5728\u76ee\u524d\u62
 B.C6=new A.ao("\u77e5\u9053\u4e86",null,null,null,null,null,null,null,null)
 B.a1B=new A.ao("\u5c1a\u7121\u8cc7\u6599",null,null,null,null,null,null,null,null)
 B.Zw=new A.v(!0,B.c4,null,null,null,null,null,B.ai,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.C7=new A.ao("\u7cfb\u7d71\u7248\u672c 0.11.0+27",null,B.Zw,null,null,null,null,null,null)
+B.C7=new A.ao("\u7cfb\u7d71\u7248\u672c 0.11.0+28",null,B.Zw,null,null,null,null,null,null)
 B.a1C=new A.ao("\u91cd\u65b0\u5b78\u7fd2\u5c3a\u898f\u4f4d\u7f6e\uff1f",null,null,null,null,null,null,null,null)
 B.a1D=new A.ao("\u91cd\u8a2d\u70ba\u6676\u7247\u76ee\u524d\u8fa8\u8b58\u4f4d\u7f6e",null,null,null,null,null,null,null,null)
 B.a1E=new A.ao("\u5c3a\u898f\uff0f\u6c34\u4f4d\u6e2c\u8a66\uff08\u4e0d\u8a18\u9304\uff09",null,null,null,null,null,null,null,null)
